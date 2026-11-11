@@ -8,7 +8,8 @@ function shortDate(isoDate: string): string {
 
 function niceRankDomain(values: number[]): [number, number] {
   const top = Math.max(1, Math.floor(Math.min(...values)) - 1);
-  const bottom = Math.ceil(Math.max(...values));
+  // Span at least 2 ranks so the 3+ axis ticks land on distinct whole numbers.
+  const bottom = Math.max(Math.ceil(Math.max(...values)), top + 2);
   return [top, bottom];
 }
 

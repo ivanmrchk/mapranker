@@ -6,6 +6,9 @@ export interface Project {
   businessLabel: string;
   placeId: string;
   address: string;
+  /** Business location from the address lookup; null when it couldn't be found. */
+  lat: number | null;
+  lng: number | null;
   status: ProjectStatus;
   lastRun: string | null;
   keywordCount: number;
@@ -36,7 +39,9 @@ export interface KeywordRunSummary {
 
 export interface PinRankPoint {
   pinId: string;
+  /** null = checked, but the business wasn't in the top 20 (shown as "20+"). */
   rank: number | null;
+  checkedAt: string;
 }
 
 export interface KeywordRunDetail {
@@ -46,6 +51,9 @@ export interface KeywordRunDetail {
   pinsChecked: number;
   avgRank: number | null;
   avgRankTrend: number | null;
+  visibility: number | null;
+  visibilityTrend: number | null;
+  /** Only pins that were checked in this run appear here. */
   pinResults: PinRankPoint[];
 }
 
@@ -90,4 +98,18 @@ export interface NewProjectInput {
   businessLabel: string;
   placeId: string;
   address?: string;
+}
+
+export interface ProjectUpdateInput {
+  name?: string;
+  businessLabel?: string;
+  placeId?: string;
+  address?: string;
+  status?: ProjectStatus;
+}
+
+export interface PinBatchResult {
+  pins: Pin[];
+  /** Maps the temporary ids of newly added pins to their saved ids. */
+  idMap: Record<string, string>;
 }

@@ -3,12 +3,15 @@ import type { NewProjectInput, Project } from '../types/project';
 import { ProjectCard } from './ProjectCard';
 import { CreateProjectModal } from './CreateProjectModal';
 import { DeleteProjectModal } from './DeleteProjectModal';
+import { ErrorBanner } from './ErrorBanner';
+import { api } from '../lib/api';
 
 export function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [projectPendingDeletion, setProjectPendingDeletion] = useState<Project | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -26,14 +29,15 @@ export function ProjectsPage() {
   }, []);
 
   async function handleCreateProject(input: NewProjectInput) {
-    const res = await fetch('/api/projects', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-    });
-    const newProject: Project = await res.json();
-    setProjects((prev) => [...prev, newProject]);
-    setIsModalOpen(false);
+    setError(null);
+    try {
+      const newProject = await api<Project>('/api/projects', { method: 'POST', body: input });
+      setProjects((prev) => [...prev, newProject]);
+      setIsModalOpen(false);
+    } catch (err) {
+      setIsModalOpen(false);
+      setError(`Couldn't create project: ${(err as Error).message}`);
+    }
   }
 
   async function handleDeleteProject(project: Project) {
@@ -56,6 +60,8 @@ export function ProjectsPage() {
           + New Project
         </button>
       </div>
+
+      <ErrorBanner message={error} onDismiss={() => setError(null)} />
 
       {isLoading ? (
         <p className="mt-6 text-sm text-gray-500">Loading projects…</p>

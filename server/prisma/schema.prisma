@@ -19,6 +19,8 @@ model Project {
   businessLabel   String
   placeId         String
   address         String        @default("")
+  lat             Float?
+  lng             Float?
   status          ProjectStatus @default(Active)
   lastRun         DateTime?     @db.Date
   avgRank         Float?
@@ -39,7 +41,11 @@ model Pin {
   lng           Float
   enabled       Boolean         @default(true)
   lastCheckedAt DateTime?
+  // Soft delete: removed pins keep their past results so run history stays intact.
+  deletedAt     DateTime?
   rankResults   PinRankResult[]
+
+  @@index([projectId, deletedAt])
 }
 
 model RankSnapshot {
@@ -49,6 +55,8 @@ model RankSnapshot {
   date       DateTime @db.Date
   avgRank    Float
   visibility Float
+
+  @@unique([projectId, date])
 }
 
 model Keyword {
@@ -69,6 +77,7 @@ model KeywordRun {
   keyword     Keyword         @relation(fields: [keywordId], references: [id], onDelete: Cascade)
   date        DateTime        @default(now())
   avgRank     Float?
+  visibility  Float?
   pinsTotal   Int
   pinsChecked Int
   results     PinRankResult[]
@@ -82,9 +91,11 @@ model PinRankResult {
   run    KeywordRun @relation(fields: [runId], references: [id], onDelete: Cascade)
   pinId  String
   pin    Pin        @relation(fields: [pinId], references: [id], onDelete: Cascade)
-  rank   Int?
+  // null = pin was checked but the business was not in the results (shown as "20+").
+  rank      Int?
+  checkedAt DateTime   @default(now())
 
-  @@index([runId])
+  @@unique([runId, pinId])
 }
 
 model Competitor {

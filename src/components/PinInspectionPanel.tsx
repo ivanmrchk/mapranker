@@ -1,4 +1,5 @@
 import type { EditablePin } from './KeywordMapPage';
+import { rankColor, rankDescription, type PinRankState } from '../lib/rank';
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
@@ -13,16 +14,22 @@ function formatDate(iso: string | null): string {
 
 interface PinInspectionPanelProps {
   pin: EditablePin | null;
-  rank: number | null;
+  rankState: PinRankState;
+  keywordText: string;
   editing: boolean;
+  isChecking: boolean;
+  onCheck: (pinId: string) => void;
   onToggleEnabled: (pinId: string) => void;
   onDelete: (pinId: string) => void;
 }
 
 export function PinInspectionPanel({
   pin,
-  rank,
+  rankState,
+  keywordText,
   editing,
+  isChecking,
+  onCheck,
   onToggleEnabled,
   onDelete,
 }: PinInspectionPanelProps) {
@@ -34,13 +41,13 @@ export function PinInspectionPanel({
     );
   }
 
-  const rankLabel = !pin.enabled
-    ? 'Pin disabled'
+  const checkBlockedReason = editing
+    ? 'Save or cancel your pin edits first.'
     : pin.isNew
-      ? 'Not yet scanned'
-      : rank !== null
-        ? `#${rank}`
-        : 'Not checked in this run';
+      ? 'Save this pin before checking it.'
+      : !pin.enabled
+        ? 'Enable this pin to check it.'
+        : null;
 
   return (
     <div className="p-5">
@@ -57,22 +64,43 @@ export function PinInspectionPanel({
 
       <dl className="mt-4 space-y-3 text-sm">
         <div>
-          <dt className="text-xs text-gray-400">Coordinates</dt>
-          <dd className="font-medium text-gray-900">
-            {pin.lat.toFixed(5)}, {pin.lng.toFixed(5)}
-          </dd>
-        </div>
-        <div>
           <dt className="text-xs text-gray-400">Ranking (selected run)</dt>
-          <dd className="font-medium text-gray-900">{rankLabel}</dd>
+          <dd className="flex items-center gap-2 font-medium text-gray-900">
+            <span
+              className="inline-block h-2.5 w-2.5 rounded-full"
+              style={{ background: rankColor(rankState) }}
+            />
+            {pin.isNew ? 'Not saved yet' : rankDescription(rankState)}
+          </dd>
         </div>
         <div>
           <dt className="text-xs text-gray-400">Last Checked</dt>
           <dd className="font-medium text-gray-900">{formatDate(pin.lastCheckedAt)}</dd>
         </div>
+        <div>
+          <dt className="text-xs text-gray-400">Coordinates</dt>
+          <dd className="font-medium text-gray-900">
+            {pin.lat.toFixed(5)}, {pin.lng.toFixed(5)}
+          </dd>
+        </div>
       </dl>
 
-      <div className="mt-6 flex flex-col gap-2">
+      <div className="mt-6">
+        <button
+          type="button"
+          onClick={() => onCheck(pin.id)}
+          disabled={checkBlockedReason !== null || isChecking}
+          className="w-full rounded-md bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
+        >
+          {isChecking ? 'Checking…' : 'Check This Pin'}
+        </button>
+        <p className="mt-1.5 text-[11px] text-gray-400">
+          {checkBlockedReason ??
+            `Checks “${keywordText}” at this pin now and updates the latest run.`}
+        </p>
+      </div>
+
+      <div className="mt-5 flex flex-col gap-2 border-t border-gray-100 pt-5">
         {editing ? (
           <>
             <button
@@ -91,7 +119,9 @@ export function PinInspectionPanel({
             </button>
           </>
         ) : (
-          <p className="text-xs text-gray-400">Enter edit mode to enable, disable, or remove this pin.</p>
+          <p className="text-xs text-gray-400">
+            Use Edit Pins to move, disable, or remove this pin.
+          </p>
         )}
       </div>
     </div>

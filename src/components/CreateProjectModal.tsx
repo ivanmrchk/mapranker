@@ -82,8 +82,12 @@ export function CreateProjectModal({ isOpen, onClose, onCreate }: CreateProjectM
             type="text"
             value={form.address}
             onChange={(e) => setForm({ ...form, address: e.target.value })}
-            className="mb-6 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="mb-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
+          <p className="mb-6 text-xs text-gray-400">
+            Used to place a 7 × 7 grid of pins, 1 km apart, around the business. You can move, add,
+            or regenerate pins later.
+          </p>
 
           <button
             type="submit"

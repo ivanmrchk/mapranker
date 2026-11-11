@@ -4,16 +4,19 @@ const prisma = new PrismaClient();
 
 async function main() {
   const address = '4821 Industrial Pkwy, Austin, TX 78744';
+  // Demo business: the address is fictional, so its location is set directly.
+  const location = { lat: 30.2692, lng: -97.7411 };
 
   await prisma.project.upsert({
     where: { id: 'surge-electrical' },
-    update: { address },
+    update: { address, ...location },
     create: {
       id: 'surge-electrical',
       name: 'Surge Electrical',
       businessLabel: 'Surge Electrical',
       placeId: 'ChIJtbL9BIMX3okReiJx2ZTgIZc',
       address,
+      ...location,
       status: 'Active',
       lastRun: new Date('2026-05-11'),
       avgRank: 3.8,

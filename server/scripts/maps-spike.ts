@@ -34,7 +34,7 @@ async function scrollFeed(page: Page, want: number) {
 }
 
 async function search(page: Page, keyword: string, lat: number, lng: number, tag: string) {
-  const url = `https://www.google.com/maps/search/${encodeURIComponent(keyword)}/@${lat},${lng},15z?hl=en`;
+  const url = `https://www.google.com/maps/search/${encodeURIComponent(keyword)}/@${lat},${lng},15z?hl=en${process.env.SPIKE_PARAMS ? `&${process.env.SPIKE_PARAMS}` : ''}`;
   const started = Date.now();
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
 
