@@ -129,10 +129,16 @@ export function simulateCheck(input: RankCheckInput, at: Date): RankCheckResult 
   const all = [...SIM_BUSINESSES.map((b) => ({ ...b, placeId: simPlaceId(b.name) })), tracked];
 
   const ranked = all
-    .map((b) => ({
-      b,
-      score: b.strength + hash01(`${b.placeId}|${area}`) * 0.6 + Math.random() * 0.06,
-    }))
+    .map((b) => {
+      // Slow momentum: each business rises and falls over a cycle of a few months.
+      const phase = hash01(`${b.placeId}|phase`) * 2 * Math.PI;
+      const period = 60 + hash01(`${b.placeId}|period`) * 90;
+      const momentum = 0.06 * Math.sin((2 * Math.PI * days) / period + phase);
+      return {
+        b,
+        score: b.strength + hash01(`${b.placeId}|${area}`) * 0.6 + momentum + Math.random() * 0.06,
+      };
+    })
     .sort((x, y) => y.score - x.score)
     .slice(0, MAX_TRACKED_RANK);
 
