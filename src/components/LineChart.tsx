@@ -3,6 +3,8 @@ import { useState, type PointerEvent } from 'react';
 interface LineChartPoint {
   label: string;
   value: number;
+  /** Shown in the hover tooltip instead of `label` when given. */
+  detail?: string;
 }
 
 interface LineChartProps {
@@ -11,6 +13,8 @@ interface LineChartProps {
   domainTop: number;
   domainBottom: number;
   tickCount?: number;
+  /** At most this many x-axis labels are drawn (always including the latest point). */
+  maxXLabels?: number;
   formatTick?: (value: number) => string;
   formatValue?: (value: number) => string;
 }
@@ -18,7 +22,8 @@ interface LineChartProps {
 const VIEW_WIDTH = 320;
 const VIEW_HEIGHT = 180;
 const PAD_LEFT = 30;
-const PAD_RIGHT = 8;
+// Room for half of the last x-axis label (e.g. "11/11"), which is centered on the last point.
+const PAD_RIGHT = 14;
 const PAD_TOP = 10;
 const PAD_BOTTOM = 20;
 const PLOT_WIDTH = VIEW_WIDTH - PAD_LEFT - PAD_RIGHT;
@@ -30,10 +35,12 @@ export function LineChart({
   domainTop,
   domainBottom,
   tickCount = 4,
+  maxXLabels = 8,
   formatTick = (v) => String(v),
   formatValue = (v) => String(v),
 }: LineChartProps) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const labelStep = Math.max(1, Math.ceil(points.length / maxXLabels));
 
   const x = (i: number) =>
     PAD_LEFT + (points.length === 1 ? PLOT_WIDTH / 2 : (i / (points.length - 1)) * PLOT_WIDTH);
@@ -87,18 +94,20 @@ export function LineChart({
           </g>
         ))}
 
-        {points.map((p, i) => (
-          <text
-            key={i}
-            x={x(i)}
-            y={VIEW_HEIGHT - 4}
-            textAnchor="middle"
-            className="fill-gray-400"
-            fontSize={9}
-          >
-            {p.label}
-          </text>
-        ))}
+        {points.map((p, i) =>
+          (points.length - 1 - i) % labelStep === 0 ? (
+            <text
+              key={i}
+              x={x(i)}
+              y={VIEW_HEIGHT - 4}
+              textAnchor="middle"
+              className="fill-gray-400"
+              fontSize={9}
+            >
+              {p.label}
+            </text>
+          ) : null,
+        )}
 
         {hoverIndex !== null && (
           <line
@@ -143,7 +152,7 @@ export function LineChart({
           }}
         >
           <div className="font-semibold text-gray-900">{formatValue(hovered.value)}</div>
-          <div className="text-gray-400">{hovered.label}</div>
+          <div className="text-gray-400">{hovered.detail ?? hovered.label}</div>
         </div>
       )}
     </div>

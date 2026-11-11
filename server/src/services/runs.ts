@@ -1,5 +1,16 @@
 import { prisma } from '../prisma.js';
-import { MAX_TRACKED_RANK, rankEngine } from '../rank/engine.js';
+import { MAX_TRACKED_RANK, rankEngine, type MapsListing } from '../rank/engine.js';
+
+/** Nested-create data for a check's results list. */
+export function entriesData(listings: MapsListing[]) {
+  return listings.map((l) => ({
+    position: l.position,
+    placeId: l.placeId,
+    name: l.name,
+    rating: l.rating,
+    reviewCount: l.reviewCount,
+  }));
+}
 
 /** Pins that count for checks: not removed and switched on. */
 export function checkablePinsWhere(projectId: string) {
@@ -44,7 +55,7 @@ export function runMetrics(results: { rank: number | null }[]) {
   };
 }
 
-async function recomputeRun(runId: string) {
+export async function recomputeRun(runId: string) {
   const run = await prisma.keywordRun.findUniqueOrThrow({
     where: { id: runId },
     include: { results: true },
@@ -139,15 +150,24 @@ export async function runAllPins(projectId: string, keywordId: string) {
 
   for (const pin of pins) {
     try {
-      const { rank } = await rankEngine.check({
+      const { rank, listings } = await rankEngine.check({
         keyword: keyword.text,
         lat: pin.lat,
         lng: pin.lng,
         placeId: keyword.project.placeId,
+        businessName: keyword.project.businessLabel,
       });
       const checkedAt = new Date();
       await prisma.$transaction([
-        prisma.pinRankResult.create({ data: { runId: run.id, pinId: pin.id, rank, checkedAt } }),
+        prisma.pinRankResult.create({
+          data: {
+            runId: run.id,
+            pinId: pin.id,
+            rank,
+            checkedAt,
+            entries: { create: entriesData(listings) },
+          },
+        }),
         prisma.pin.update({ where: { id: pin.id }, data: { lastCheckedAt: checkedAt } }),
       ]);
     } catch (err) {
@@ -173,12 +193,14 @@ export async function checkSinglePin(projectId: string, keywordId: string, pinId
   if (!pin.enabled) throw new RunError('Pin is disabled', 400);
 
   let rank: number | null;
+  let listings: MapsListing[];
   try {
-    ({ rank } = await rankEngine.check({
+    ({ rank, listings } = await rankEngine.check({
       keyword: keyword.text,
       lat: pin.lat,
       lng: pin.lng,
       placeId: keyword.project.placeId,
+      businessName: keyword.project.businessLabel,
     }));
   } catch (err) {
     throw new RunError(`Check failed: ${(err as Error).message}`, 502);
@@ -199,8 +221,8 @@ export async function checkSinglePin(projectId: string, keywordId: string, pinId
   await prisma.$transaction([
     prisma.pinRankResult.upsert({
       where: { runId_pinId: { runId: latest.id, pinId } },
-      create: { runId: latest.id, pinId, rank, checkedAt },
-      update: { rank, checkedAt },
+      create: { runId: latest.id, pinId, rank, checkedAt, entries: { create: entriesData(listings) } },
+      update: { rank, checkedAt, entries: { deleteMany: {}, create: entriesData(listings) } },
     }),
     prisma.pin.update({ where: { id: pinId }, data: { lastCheckedAt: checkedAt } }),
   ]);

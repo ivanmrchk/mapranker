@@ -1,5 +1,6 @@
 import type { EditablePin } from './KeywordMapPage';
 import { rankColor, rankDescription, type PinRankState } from '../lib/rank';
+import { PinInsightsSection } from './PinInsightsSection';
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
@@ -15,7 +16,13 @@ function formatDate(iso: string | null): string {
 interface PinInspectionPanelProps {
   pin: EditablePin | null;
   rankState: PinRankState;
+  projectId: string;
+  keywordId: string;
   keywordText: string;
+  /** The run being viewed; competitor data is shown for this run. */
+  runId: string | null;
+  /** When this pin was checked in the viewed run; a change reloads the pin history. */
+  resultCheckedAt: string | null;
   editing: boolean;
   isChecking: boolean;
   onCheck: (pinId: string) => void;
@@ -26,7 +33,11 @@ interface PinInspectionPanelProps {
 export function PinInspectionPanel({
   pin,
   rankState,
+  projectId,
+  keywordId,
   keywordText,
+  runId,
+  resultCheckedAt,
   editing,
   isChecking,
   onCheck,
@@ -124,6 +135,17 @@ export function PinInspectionPanel({
           </p>
         )}
       </div>
+
+      {!pin.isNew && (
+        <PinInsightsSection
+          key={pin.id}
+          projectId={projectId}
+          keywordId={keywordId}
+          pinId={pin.id}
+          runId={runId}
+          resultVersion={resultCheckedAt}
+        />
+      )}
     </div>
   );
 }

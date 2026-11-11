@@ -19,6 +19,7 @@ import {
   refreshProjectStats,
   runAllPins,
 } from '../services/runs.js';
+import { getPinInsights } from '../services/insights.js';
 
 const router = Router();
 
@@ -355,6 +356,15 @@ router.post('/:id/keywords/:keywordId/pins/:pinId/check', async (req, res) => {
   try {
     const runId = await checkSinglePin(req.params.id, req.params.keywordId, req.params.pinId);
     res.json(await keywordRunResponse(req.params.keywordId, runId));
+  } catch (err) {
+    if (!sendRunError(res, err)) throw err;
+  }
+});
+
+router.get('/:id/keywords/:keywordId/pins/:pinId/insights', async (req, res) => {
+  const runId = typeof req.query.runId === 'string' ? req.query.runId : undefined;
+  try {
+    res.json(await getPinInsights(req.params.id, req.params.keywordId, req.params.pinId, runId));
   } catch (err) {
     if (!sendRunError(res, err)) throw err;
   }

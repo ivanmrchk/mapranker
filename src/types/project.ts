@@ -108,6 +108,30 @@ export interface ProjectUpdateInput {
   status?: ProjectStatus;
 }
 
+export interface PinCompetitor {
+  position: number;
+  /** Position at this pin in the previous scan; null if it wasn't there or there's no previous scan. */
+  previousPosition: number | null;
+  /** True when there is a previous scan and this business wasn't in it. */
+  isNew: boolean;
+  placeId: string;
+  name: string;
+  rating: number | null;
+  reviewCount: number | null;
+  /** Reviews gained over the 7 days before this scan; null without an earlier observation. */
+  reviewsGained: number | null;
+  reviewsSince: string | null;
+  isYou: boolean;
+}
+
+export interface PinInsights {
+  /** This pin's rank in every run that checked it, oldest first. */
+  history: { runId: string; date: string; rank: number | null }[];
+  scan: { runId: string; checkedAt: string; rank: number | null } | null;
+  previousScan: { runId: string; date: string; rank: number | null } | null;
+  competitors: PinCompetitor[];
+}
+
 export interface PinBatchResult {
   pins: Pin[];
   /** Maps the temporary ids of newly added pins to their saved ids. */

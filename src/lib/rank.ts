@@ -30,6 +30,25 @@ export function rankMarkerText(state: PinRankState): string {
   return '';
 }
 
+/**
+ * Y-axis for a rank chart (best rank on top) with evenly spaced whole-number ticks:
+ * at most 5 ticks, at least 2 ranks of range, never above `cap` or below 1.
+ */
+export function rankAxis(values: number[], cap = Infinity) {
+  const lo = Math.max(1, Math.floor(Math.min(...values)) - 1);
+  const hi = Math.min(cap, Math.ceil(Math.max(...values)) + 1);
+  const span = Math.max(2, hi - lo);
+  const step = Math.ceil(span / 4);
+  const steps = Math.ceil(span / step);
+  let top = lo;
+  let bottom = lo + step * steps;
+  if (bottom > cap) {
+    bottom = cap;
+    top = Math.max(1, cap - step * steps);
+  }
+  return { top, bottom, tickCount: Math.round((bottom - top) / step) + 1 };
+}
+
 export function rankDescription(state: PinRankState): string {
   if (typeof state === 'number') return `#${state}`;
   if (state === 'notFound') return 'Not in top 20';

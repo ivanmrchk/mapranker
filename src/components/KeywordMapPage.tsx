@@ -458,7 +458,7 @@ export function KeywordMapPage() {
         </div>
       )}
 
-      <div className="mt-3 flex h-[560px] gap-4">
+      <div className="mt-3 flex h-[640px] gap-4">
         <div className="flex-[7] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
           {pinsLoaded && !isLoading && (
             <PinMap
@@ -480,7 +480,11 @@ export function KeywordMapPage() {
           <PinInspectionPanel
             pin={selectedPin}
             rankState={selectedPin ? getRankState(selectedPin) : 'unchecked'}
+            projectId={id ?? ''}
+            keywordId={keywordId ?? ''}
             keywordText={keyword?.text ?? ''}
+            runId={run?.id ?? selectedRunId}
+            resultCheckedAt={selectedPin ? (resultByPin.get(selectedPin.id)?.checkedAt ?? null) : null}
             editing={editing}
             isChecking={checkingPinId !== null && checkingPinId === selectedPinId}
             onCheck={handleCheckPin}

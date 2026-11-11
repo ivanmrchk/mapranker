@@ -94,8 +94,25 @@ model PinRankResult {
   // null = pin was checked but the business was not in the results (shown as "20+").
   rank      Int?
   checkedAt DateTime   @default(now())
+  /// The full results list seen at this pin (top 20), used for competitor insights.
+  entries   PinResultEntry[]
 
   @@unique([runId, pinId])
+}
+
+/// One business in the results list of a single pin check.
+model PinResultEntry {
+  id          String        @id @default(cuid())
+  resultId    String
+  result      PinRankResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  position    Int
+  placeId     String
+  name        String
+  rating      Float?
+  reviewCount Int?
+
+  @@index([resultId])
+  @@index([placeId])
 }
 
 model Competitor {

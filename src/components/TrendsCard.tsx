@@ -1,16 +1,10 @@
 import type { RankHistoryPoint } from '../types/project';
 import { LineChart } from './LineChart';
+import { rankAxis } from '../lib/rank';
 
 function shortDate(isoDate: string): string {
   const date = new Date(`${isoDate}T00:00:00`);
   return `${date.getMonth() + 1}/${date.getDate()}`;
-}
-
-function niceRankDomain(values: number[]): [number, number] {
-  const top = Math.max(1, Math.floor(Math.min(...values)) - 1);
-  // Span at least 2 ranks so the 3+ axis ticks land on distinct whole numbers.
-  const bottom = Math.max(Math.ceil(Math.max(...values)), top + 2);
-  return [top, bottom];
 }
 
 export function TrendsCard({ history }: { history: RankHistoryPoint[] }) {
@@ -18,8 +12,11 @@ export function TrendsCard({ history }: { history: RankHistoryPoint[] }) {
 
   const rankPoints = history.map((h) => ({ label: shortDate(h.date), value: h.avgRank }));
   const visibilityPoints = history.map((h) => ({ label: shortDate(h.date), value: h.visibility }));
-  const [rankTop, rankBottom] = niceRankDomain(history.map((h) => h.avgRank));
-  const rankTickCount = Math.max(3, Math.min(6, rankBottom - rankTop + 1));
+  const {
+    top: rankTop,
+    bottom: rankBottom,
+    tickCount: rankTickCount,
+  } = rankAxis(history.map((h) => h.avgRank));
 
   return (
     <div className="mt-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
