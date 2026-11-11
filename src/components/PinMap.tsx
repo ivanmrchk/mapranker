@@ -10,7 +10,10 @@ const FALLBACK_CENTER: [number, number] = [39.8283, -98.5795];
 
 const iconCache = new Map<string, L.DivIcon>();
 
-function pinIcon(state: PinRankState, selected: boolean, isNew: boolean): L.DivIcon {
+function pinIcon(
+  state: PinRankState,
+  { selected, isNew }: { selected: boolean; isNew: boolean },
+): L.DivIcon {
   const key = `${state}|${selected}|${isNew}`;
   const cached = iconCache.get(key);
   if (cached) return cached;
@@ -144,7 +147,10 @@ export function PinMap({
             key={pin.id}
             position={[pin.lat, pin.lng]}
             draggable={editing}
-            icon={pinIcon(getRankState(pin), pin.id === selectedPinId, !!pin.isNew)}
+            icon={pinIcon(getRankState(pin), {
+              selected: pin.id === selectedPinId,
+              isNew: !!pin.isNew,
+            })}
             zIndexOffset={pin.id === selectedPinId ? 1000 : 0}
             eventHandlers={{
               click: () => onSelectPin(pin.id),

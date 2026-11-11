@@ -18,6 +18,9 @@ dist-ssr
 # Server env
 server/.env
 
+# Local-only working notes (see CLAUDE.md)
+CONTEXT.md
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
