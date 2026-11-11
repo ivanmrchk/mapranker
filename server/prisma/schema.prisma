@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ProjectStatus {
+  Active
+  Paused
+  Inactive
+}
+
+model Project {
+  id              String        @id @default(cuid())
+  name            String
+  businessLabel   String
+  placeId         String
+  address         String        @default("")
+  status          ProjectStatus @default(Active)
+  lastRun         DateTime?     @db.Date
+  avgRank         Float?
+  avgRankTrend    Float?
+  visibility      Float?
+  visibilityTrend Float?
+  pins            Pin[]
+  rankSnapshots   RankSnapshot[]
+  keywords        Keyword[]
+  competitors     Competitor[]
+}
+
+model Pin {
+  id            String          @id @default(cuid())
+  projectId     String
+  project       Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  lat           Float
+  lng           Float
+  enabled       Boolean         @default(true)
+  lastCheckedAt DateTime?
+  rankResults   PinRankResult[]
+}
+
+model RankSnapshot {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  date       DateTime @db.Date
+  avgRank    Float
+  visibility Float
+}
+
+model Keyword {
+  id         String       @id @default(cuid())
+  projectId  String
+  project    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  text       String
+  avgRank    Float?
+  visibility Float?
+  lastRun    DateTime?    @db.Date
+  createdAt  DateTime     @default(now())
+  runs       KeywordRun[]
+}
+
+model KeywordRun {
+  id          String          @id @default(cuid())
+  keywordId   String
+  keyword     Keyword         @relation(fields: [keywordId], references: [id], onDelete: Cascade)
+  date        DateTime        @default(now())
+  avgRank     Float?
+  pinsTotal   Int
+  pinsChecked Int
+  results     PinRankResult[]
+
+  @@index([keywordId, date])
+}
+
+model PinRankResult {
+  id     String     @id @default(cuid())
+  runId  String
+  run    KeywordRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  pinId  String
+  pin    Pin        @relation(fields: [pinId], references: [id], onDelete: Cascade)
+  rank   Int?
+
+  @@index([runId])
+}
+
+model Competitor {
+  id                  String  @id @default(cuid())
+  projectId           String
+  project             Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name                String
+  placeId             String?
+  avgRank             Float?
+  visibility          Float?
+  reviewCount         Int?
+  reviewGrowthPerWeek Float?
+}

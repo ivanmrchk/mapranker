@@ -1,0 +1,29 @@
+{
+  "name": "map-ranker-server",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -b",
+    "start": "node dist/index.js",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:generate": "prisma generate",
+    "prisma:seed": "tsx prisma/seed.ts",
+    "prisma:studio": "prisma studio"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.16.3",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/node": "^24.13.2",
+    "prisma": "^6.16.3",
+    "tsx": "^4.20.6",
+    "typescript": "~6.0.2"
+  }
+}

@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: map-ranker-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mapranker
+      POSTGRES_PASSWORD: mapranker
+      POSTGRES_DB: mapranker
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
