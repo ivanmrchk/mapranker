@@ -19,6 +19,8 @@ import { PinInspectionPanel } from './PinInspectionPanel';
 import { GridModal, type GridOptions } from './GridModal';
 import { MapLegend } from './MapLegend';
 import { ErrorBanner } from './ErrorBanner';
+import { useRunPolling } from '../lib/useRunPolling';
+import { RunControls } from './RunControls';
 
 export interface EditablePin extends Pin {
   isNew?: boolean;
@@ -43,7 +45,10 @@ export function KeywordMapPage() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [run, setRun] = useState<KeywordRunDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isRunning, setIsRunning] = useState(false);
+  const [isStartingRun, setIsStartingRun] = useState(false);
+  const [isStoppingRun, setIsStoppingRun] = useState(false);
+  /** Latest progress of the run in progress, whichever run is being viewed. */
+  const [liveRun, setLiveRun] = useState<KeywordRunDetail | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -132,13 +137,17 @@ export function KeywordMapPage() {
             ...data.keyword,
             runs: prev.runs.some((r) => r.id === data.run.id)
               ? prev.runs
-              : [{ id: data.run.id, date: data.run.date }, ...prev.runs],
+              : [{ id: data.run.id, date: data.run.date, status: data.run.status }, ...prev.runs],
           }
         : prev,
     );
     setRun(data.run);
     setSelectedRunId(data.run.id);
-    const checkedAt = new Map(data.run.pinResults.map((r) => [r.pinId, r.checkedAt]));
+    markPinsChecked(data.run);
+  }
+
+  function markPinsChecked(updated: KeywordRunDetail) {
+    const checkedAt = new Map(updated.pinResults.map((r) => [r.pinId, r.checkedAt]));
     setPins((prev) =>
       prev.map((p) => {
         const at = checkedAt.get(p.id);
@@ -147,20 +156,54 @@ export function KeywordMapPage() {
     );
   }
 
+  // A run checks its pins in the background on the server; follow it until it ends.
+  const activeRunId = keyword?.runs.find((r) => r.status === 'Running')?.id ?? null;
+  useRunPolling({
+    runPath: activeRunId ? `/api/projects/${id}/keywords/${keywordId}/runs/${activeRunId}` : null,
+    onUpdate: handleRunProgress,
+    onError: (err) => setError(`Couldn't refresh the run's progress: ${err.message}`),
+  });
+
+  function handleRunProgress(update: KeywordRunDetail) {
+    setLiveRun(update);
+    setRun((prev) => (prev?.id === update.id ? update : prev));
+    markPinsChecked(update);
+    if (update.status === 'Running') return;
+    setIsStoppingRun(false);
+    // The keyword's stats and its run list changed now that the run is over.
+    api<KeywordDetail>(`/api/projects/${id}/keywords/${keywordId}`)
+      .then(setKeyword)
+      .catch((err: Error) => setError(`Couldn't refresh the keyword: ${err.message}`));
+  }
+
   async function handleRunAllPins() {
-    if (!id || !keywordId || isRunning) return;
-    setIsRunning(true);
+    if (!id || !keywordId || isStartingRun || activeRunId) return;
+    setIsStartingRun(true);
     setError(null);
     try {
-      applyRunResult(
-        await api<KeywordRunResult>(`/api/projects/${id}/keywords/${keywordId}/run`, {
-          method: 'POST',
-        }),
-      );
+      const started = await api<KeywordRunResult>(`/api/projects/${id}/keywords/${keywordId}/run`, {
+        method: 'POST',
+      });
+      setLiveRun(started.run);
+      applyRunResult(started);
     } catch (err) {
-      setError(`Run failed: ${(err as Error).message}`);
+      setError(`Couldn't start the run: ${(err as Error).message}`);
     } finally {
-      setIsRunning(false);
+      setIsStartingRun(false);
+    }
+  }
+
+  async function handleStopRun() {
+    if (!activeRunId || isStoppingRun) return;
+    setIsStoppingRun(true);
+    try {
+      // The run ends after the pin it's checking; polling picks up the final state.
+      await api(`/api/projects/${id}/keywords/${keywordId}/runs/${activeRunId}/stop`, {
+        method: 'POST',
+      });
+    } catch (err) {
+      setIsStoppingRun(false);
+      setError(`Couldn't stop the run: ${(err as Error).message}`);
     }
   }
 
@@ -307,6 +350,7 @@ export function KeywordMapPage() {
     return result.rank ?? 'notFound';
   }
 
+  const activeRun = activeRunId ? ([liveRun, run].find((r) => r?.id === activeRunId) ?? null) : null;
   const selectedPin = pins.find((p) => p.id === selectedPinId) ?? null;
   // Includes unsaved pins while editing, so the count matches what's on the map.
   const enabledPinCount = pins.filter((p) => p.enabled).length;
@@ -350,15 +394,21 @@ export function KeywordMapPage() {
       {!isLoading && keyword && (
         <>
           <div className="mt-6 flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={handleRunAllPins}
-              disabled={isRunning || editing || enabledPinCount === 0}
-              title={editing ? 'Save or cancel your pin edits first' : undefined}
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300"
-            >
-              {isRunning ? 'Running…' : 'Run All Pins'}
-            </button>
+            <RunControls
+              activeRun={activeRun}
+              isRunInProgress={activeRunId !== null}
+              isStarting={isStartingRun}
+              isStopping={isStoppingRun}
+              startBlockedReason={
+                editing
+                  ? 'Save or cancel your pin edits first'
+                  : enabledPinCount === 0
+                    ? 'Add or enable pins first'
+                    : null
+              }
+              onStart={handleRunAllPins}
+              onStop={handleStopRun}
+            />
             <RunsDropdown
               runs={keyword.runs}
               selectedRunId={selectedRunId}
@@ -383,6 +433,13 @@ export function KeywordMapPage() {
               trend={run ? { value: run.visibilityTrend, direction: 'higherIsBetter' } : undefined}
             />
           </div>
+
+          {run?.status === 'Stopped' && (
+            <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+              This run stopped after checking {run.pinsChecked} of {run.pinsTotal} pins.{' '}
+              {run.stopReason}
+            </p>
+          )}
         </>
       )}
 
@@ -433,7 +490,9 @@ export function KeywordMapPage() {
             <button
               type="button"
               onClick={handleEnterEdit}
-              className="rounded-md border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+              disabled={activeRunId !== null}
+              title={activeRunId ? 'Pins can be edited once the run finishes' : undefined}
+              className="rounded-md border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Edit Pins
             </button>
@@ -486,6 +545,7 @@ export function KeywordMapPage() {
             runId={run?.id ?? selectedRunId}
             resultCheckedAt={selectedPin ? (resultByPin.get(selectedPin.id)?.checkedAt ?? null) : null}
             editing={editing}
+            isRunInProgress={activeRunId !== null}
             isChecking={checkingPinId !== null && checkingPinId === selectedPinId}
             onCheck={handleCheckPin}
             onToggleEnabled={handleToggleEnabled}

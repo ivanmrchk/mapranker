@@ -4,7 +4,7 @@
 //
 // Usage: npx tsx scripts/simulate-history.ts <projectId> [weeks=8]
 import { prisma } from '../src/prisma.js';
-import { simulateCheck } from '../src/rank/engine.js';
+import { simulateCheck } from '../src/rank/simulatedEngine.js';
 import {
   checkablePinsWhere,
   entriesData,

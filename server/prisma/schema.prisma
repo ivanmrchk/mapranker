@@ -71,6 +71,12 @@ model Keyword {
   runs       KeywordRun[]
 }
 
+enum RunStatus {
+  Running
+  Completed
+  Stopped
+}
+
 model KeywordRun {
   id          String          @id @default(cuid())
   keywordId   String
@@ -80,6 +86,9 @@ model KeywordRun {
   visibility  Float?
   pinsTotal   Int
   pinsChecked Int
+  status      RunStatus       @default(Completed)
+  /// Why a Stopped run ended early (stopped by the user, CAPTCHA, server restart, error).
+  stopReason  String?
   results     PinRankResult[]
 
   @@index([keywordId, date])

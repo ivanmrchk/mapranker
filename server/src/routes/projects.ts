@@ -1,139 +1,20 @@
-import { Router, type Response } from 'express';
-import {
-  Prisma,
-  ProjectStatus,
-  type Competitor as PrismaCompetitor,
-  type Keyword as PrismaKeyword,
-  type KeywordRun as PrismaKeywordRun,
-  type Pin,
-  type PinRankResult,
-  type Project as PrismaProject,
-  type RankSnapshot,
-} from '@prisma/client';
+import { Router } from 'express';
+import { Prisma, ProjectStatus } from '@prisma/client';
 import { prisma } from '../prisma.js';
 import { generateGrid, geocodeAddress } from '../lib/geo.js';
-import {
-  RunError,
-  checkSinglePin,
-  checkablePinsWhere,
-  refreshProjectStats,
-  runAllPins,
-} from '../services/runs.js';
+import { checkablePinsWhere, refreshProjectStats } from '../services/runs.js';
 import { getPinInsights } from '../services/insights.js';
+import {
+  sendRunError,
+  serializeKeyword,
+  serializeKeywordRun,
+  serializePin,
+  serializeProject,
+  serializeProjectDetail,
+  serializeRunSummary,
+} from './responses.js';
 
 const router = Router();
-
-// ---------- serializers ----------
-
-function serialize(p: PrismaProject, keywordCount: number) {
-  return {
-    id: p.id,
-    name: p.name,
-    businessLabel: p.businessLabel,
-    placeId: p.placeId,
-    address: p.address,
-    lat: p.lat,
-    lng: p.lng,
-    status: p.status,
-    lastRun: p.lastRun ? p.lastRun.toISOString().slice(0, 10) : null,
-    keywordCount,
-    avgRank: p.avgRank,
-    avgRankTrend: p.avgRankTrend,
-    visibility: p.visibility,
-    visibilityTrend: p.visibilityTrend,
-  };
-}
-
-function serializeKeyword(k: PrismaKeyword) {
-  return {
-    id: k.id,
-    text: k.text,
-    avgRank: k.avgRank,
-    visibility: k.visibility,
-    lastRun: k.lastRun ? k.lastRun.toISOString().slice(0, 10) : null,
-  };
-}
-
-function serializePin(p: Pin) {
-  return {
-    id: p.id,
-    lat: p.lat,
-    lng: p.lng,
-    enabled: p.enabled,
-    lastCheckedAt: p.lastCheckedAt ? p.lastCheckedAt.toISOString() : null,
-  };
-}
-
-function round1(n: number) {
-  return Math.round(n * 10) / 10;
-}
-
-async function computeRunTrends(run: PrismaKeywordRun) {
-  const previous = await prisma.keywordRun.findFirst({
-    where: { keywordId: run.keywordId, date: { lt: run.date } },
-    orderBy: { date: 'desc' },
-  });
-  return {
-    avgRankTrend:
-      run.avgRank !== null && previous?.avgRank != null ? round1(run.avgRank - previous.avgRank) : null,
-    visibilityTrend:
-      run.visibility !== null && previous?.visibility != null
-        ? round1(run.visibility - previous.visibility)
-        : null,
-  };
-}
-
-async function serializeKeywordRun(run: PrismaKeywordRun & { results: PinRankResult[] }) {
-  return {
-    id: run.id,
-    date: run.date.toISOString(),
-    pinsTotal: run.pinsTotal,
-    pinsChecked: run.pinsChecked,
-    avgRank: run.avgRank,
-    visibility: run.visibility,
-    ...(await computeRunTrends(run)),
-    pinResults: run.results.map((r) => ({
-      pinId: r.pinId,
-      rank: r.rank,
-      checkedAt: r.checkedAt.toISOString(),
-    })),
-  };
-}
-
-function serializeCompetitor(c: PrismaCompetitor) {
-  return {
-    id: c.id,
-    name: c.name,
-    placeId: c.placeId,
-    avgRank: c.avgRank,
-    visibility: c.visibility,
-    reviewCount: c.reviewCount,
-    reviewGrowthPerWeek: c.reviewGrowthPerWeek,
-  };
-}
-
-function serializeDetail(
-  p: PrismaProject & {
-    pins: Pin[];
-    rankSnapshots: RankSnapshot[];
-    keywords: PrismaKeyword[];
-    competitors: PrismaCompetitor[];
-  },
-) {
-  const enabledPins = p.pins.filter((pin) => pin.enabled);
-  return {
-    ...serialize(p, p.keywords.length),
-    pinsTracked: enabledPins.filter((pin) => pin.lastCheckedAt !== null).length,
-    pinsTotal: enabledPins.length,
-    rankHistory: p.rankSnapshots.map((s) => ({
-      date: s.date.toISOString().slice(0, 10),
-      avgRank: s.avgRank,
-      visibility: s.visibility,
-    })),
-    keywords: p.keywords.map(serializeKeyword),
-    competitors: p.competitors.map(serializeCompetitor),
-  };
-}
 
 // ---------- helpers ----------
 
@@ -149,25 +30,8 @@ function loadProjectDetail(id: string) {
   });
 }
 
-/** Response for anything that changes a keyword's runs: the keyword plus the affected run. */
-async function keywordRunResponse(keywordId: string, runId: string) {
-  const [keyword, run] = await Promise.all([
-    prisma.keyword.findUniqueOrThrow({ where: { id: keywordId } }),
-    prisma.keywordRun.findUniqueOrThrow({ where: { id: runId }, include: { results: true } }),
-  ]);
-  return { keyword: serializeKeyword(keyword), run: await serializeKeywordRun(run) };
-}
-
 function isNotFound(err: unknown) {
   return err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025';
-}
-
-function sendRunError(res: Response, err: unknown) {
-  if (err instanceof RunError) {
-    res.status(err.status).json({ error: err.message });
-    return true;
-  }
-  return false;
 }
 
 function isLat(v: unknown): v is number {
@@ -189,7 +53,7 @@ router.get('/', async (_req, res) => {
     orderBy: { name: 'asc' },
     include: { _count: { select: { keywords: true } } },
   });
-  res.json(projects.map((p) => serialize(p, p._count.keywords)));
+  res.json(projects.map((p) => serializeProject(p, p._count.keywords)));
 });
 
 router.get('/:id', async (req, res) => {
@@ -198,7 +62,7 @@ router.get('/:id', async (req, res) => {
     res.status(404).json({ error: 'Project not found' });
     return;
   }
-  res.json(serializeDetail(project));
+  res.json(serializeProjectDetail(project));
 });
 
 router.post('/', async (req, res) => {
@@ -223,7 +87,7 @@ router.post('/', async (req, res) => {
       data: generateGrid(location).map((point) => ({ projectId: project.id, ...point })),
     });
   }
-  res.status(201).json(serialize(project, 0));
+  res.status(201).json(serializeProject(project, 0));
 });
 
 router.patch('/:id', async (req, res) => {
@@ -255,7 +119,7 @@ router.patch('/:id', async (req, res) => {
     data.lng = location?.lng ?? null;
   }
   await prisma.project.update({ where: { id: existing.id }, data });
-  res.json(serializeDetail((await loadProjectDetail(existing.id))!));
+  res.json(serializeProjectDetail((await loadProjectDetail(existing.id))!));
 });
 
 router.delete('/:id', async (req, res) => {
@@ -323,7 +187,7 @@ router.get('/:id/keywords/:keywordId', async (req, res) => {
   res.json({
     ...serializeKeyword(keyword),
     pinsTotal,
-    runs: runs.map((r) => ({ id: r.id, date: r.date.toISOString() })),
+    runs: runs.map(serializeRunSummary),
   });
 });
 
@@ -341,24 +205,6 @@ router.get('/:id/keywords/:keywordId/runs/:runId', async (req, res) => {
     return;
   }
   res.json(await serializeKeywordRun(run));
-});
-
-router.post('/:id/keywords/:keywordId/run', async (req, res) => {
-  try {
-    const runId = await runAllPins(req.params.id, req.params.keywordId);
-    res.json(await keywordRunResponse(req.params.keywordId, runId));
-  } catch (err) {
-    if (!sendRunError(res, err)) throw err;
-  }
-});
-
-router.post('/:id/keywords/:keywordId/pins/:pinId/check', async (req, res) => {
-  try {
-    const runId = await checkSinglePin(req.params.id, req.params.keywordId, req.params.pinId);
-    res.json(await keywordRunResponse(req.params.keywordId, runId));
-  } catch (err) {
-    if (!sendRunError(res, err)) throw err;
-  }
 });
 
 router.get('/:id/keywords/:keywordId/pins/:pinId/insights', async (req, res) => {

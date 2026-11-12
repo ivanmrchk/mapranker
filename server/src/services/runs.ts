@@ -1,5 +1,5 @@
 import { prisma } from '../prisma.js';
-import { MAX_TRACKED_RANK, rankEngine, type MapsListing } from '../rank/engine.js';
+import { MAX_TRACKED_RANK, type MapsListing, type RankCheckResult } from '../rank/engine.js';
 
 /** Nested-create data for a check's results list. */
 export function entriesData(listings: MapsListing[]) {
@@ -20,22 +20,98 @@ export function checkablePinsWhere(projectId: string) {
 export class RunError extends Error {
   constructor(
     message: string,
-    public status: number,
+    public readonly status: number,
   ) {
     super(message);
   }
 }
 
-function round1(n: number): number {
-  return Math.round(n * 10) / 10;
+export async function loadKeyword(projectId: string, keywordId: string) {
+  const keyword = await prisma.keyword.findFirst({
+    where: { id: keywordId, projectId },
+    include: { project: true },
+  });
+  if (!keyword) throw new RunError('Keyword not found', 404);
+  return keyword;
 }
 
-function todayDate(): Date {
-  return new Date(new Date().toISOString().slice(0, 10));
+/** Stores one pin's check in a run, replacing any earlier result for that pin in the run. */
+export async function savePinResult({
+  runId,
+  pinId,
+  result: { rank, listings },
+}: {
+  runId: string;
+  pinId: string;
+  result: RankCheckResult;
+}) {
+  const checkedAt = new Date();
+  await prisma.$transaction([
+    prisma.pinRankResult.upsert({
+      where: { runId_pinId: { runId, pinId } },
+      create: { runId, pinId, rank, checkedAt, entries: { create: entriesData(listings) } },
+      update: { rank, checkedAt, entries: { deleteMany: {}, create: entriesData(listings) } },
+    }),
+    prisma.pin.update({ where: { id: pinId }, data: { lastCheckedAt: checkedAt } }),
+  ]);
 }
 
-function mean(values: number[]): number | null {
-  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
+/** The keyword's latest run, or a new (completed, empty) one when it has none yet. */
+export async function latestRunOrNew(projectId: string, keywordId: string) {
+  return (
+    (await prisma.keywordRun.findFirst({ where: { keywordId }, orderBy: { date: 'desc' } })) ??
+    (await prisma.keywordRun.create({
+      data: {
+        keywordId,
+        date: new Date(),
+        pinsTotal: await prisma.pin.count({ where: checkablePinsWhere(projectId) }),
+        pinsChecked: 0,
+      },
+    }))
+  );
+}
+
+/** Marks a run finished (Stopped when there's a reason, else Completed) and updates all stats. */
+export async function finishRun({
+  runId,
+  stopReason,
+}: {
+  runId: string;
+  stopReason: string | null;
+}) {
+  const run = await prisma.keywordRun.update({
+    where: { id: runId },
+    data: { status: stopReason ? 'Stopped' : 'Completed', stopReason },
+    include: { keyword: true },
+  });
+  await refreshStatsAfterCheck({ runId, keywordId: run.keywordId, projectId: run.keyword.projectId });
+}
+
+/** Recalculates a run, its keyword and its project after results changed. */
+export async function refreshStatsAfterCheck({
+  runId,
+  keywordId,
+  projectId,
+}: {
+  runId: string;
+  keywordId: string;
+  projectId: string;
+}) {
+  await recomputeRun(runId);
+  await refreshKeywordStats(keywordId);
+  await refreshProjectStats(projectId);
+}
+
+/**
+ * A run can't survive a server restart (its progress lives in the process), so any run
+ * still marked Running at start-up was cut off. Keep what it checked and mark it stopped.
+ */
+export async function stopInterruptedRuns() {
+  const interrupted = await prisma.keywordRun.findMany({ where: { status: 'Running' } });
+  for (const run of interrupted) {
+    await finishRun({ runId: run.id, stopReason: 'The server stopped before the run finished.' });
+  }
+  return interrupted.length;
 }
 
 /**
@@ -67,10 +143,13 @@ export async function recomputeRun(runId: string) {
   });
 }
 
-/** Keyword stats mirror its most recent run. */
+/**
+ * Keyword stats mirror its most recent run that checked anything (a run stopped before its
+ * first pin, e.g. by a CAPTCHA, has no numbers to show).
+ */
 export async function refreshKeywordStats(keywordId: string) {
   const latest = await prisma.keywordRun.findFirst({
-    where: { keywordId },
+    where: { keywordId, pinsChecked: { gt: 0 } },
     orderBy: { date: 'desc' },
   });
   return prisma.keyword.update({
@@ -131,104 +210,14 @@ export async function refreshProjectStats(projectId: string) {
   ]);
 }
 
-async function loadKeyword(projectId: string, keywordId: string) {
-  const keyword = await prisma.keyword.findFirst({
-    where: { id: keywordId, projectId },
-    include: { project: true },
-  });
-  if (!keyword) throw new RunError('Keyword not found', 404);
-  return keyword;
+function round1(n: number): number {
+  return Math.round(n * 10) / 10;
 }
 
-/** Checks every enabled pin for a keyword and stores the results as a new run. */
-export async function runAllPins(projectId: string, keywordId: string) {
-  const keyword = await loadKeyword(projectId, keywordId);
-  const pins = await prisma.pin.findMany({ where: checkablePinsWhere(projectId) });
-  const run = await prisma.keywordRun.create({
-    data: { keywordId, date: new Date(), pinsTotal: pins.length, pinsChecked: 0 },
-  });
-
-  for (const pin of pins) {
-    try {
-      const { rank, listings } = await rankEngine.check({
-        keyword: keyword.text,
-        lat: pin.lat,
-        lng: pin.lng,
-        placeId: keyword.project.placeId,
-        businessName: keyword.project.businessLabel,
-      });
-      const checkedAt = new Date();
-      await prisma.$transaction([
-        prisma.pinRankResult.create({
-          data: {
-            runId: run.id,
-            pinId: pin.id,
-            rank,
-            checkedAt,
-            entries: { create: entriesData(listings) },
-          },
-        }),
-        prisma.pin.update({ where: { id: pin.id }, data: { lastCheckedAt: checkedAt } }),
-      ]);
-    } catch (err) {
-      // Leave this pin unchecked for the run; the others still count.
-      console.warn(`Check failed for pin ${pin.id} (${keyword.text}):`, (err as Error).message);
-    }
-  }
-
-  await recomputeRun(run.id);
-  await refreshKeywordStats(keywordId);
-  await refreshProjectStats(projectId);
-  return run.id;
+function todayDate(): Date {
+  return new Date(new Date().toISOString().slice(0, 10));
 }
 
-/**
- * Checks one pin on demand. The result replaces that pin's result in the keyword's
- * latest run (creating a run if the keyword has none), then stats are recalculated.
- */
-export async function checkSinglePin(projectId: string, keywordId: string, pinId: string) {
-  const keyword = await loadKeyword(projectId, keywordId);
-  const pin = await prisma.pin.findFirst({ where: { id: pinId, projectId, deletedAt: null } });
-  if (!pin) throw new RunError('Pin not found', 404);
-  if (!pin.enabled) throw new RunError('Pin is disabled', 400);
-
-  let rank: number | null;
-  let listings: MapsListing[];
-  try {
-    ({ rank, listings } = await rankEngine.check({
-      keyword: keyword.text,
-      lat: pin.lat,
-      lng: pin.lng,
-      placeId: keyword.project.placeId,
-      businessName: keyword.project.businessLabel,
-    }));
-  } catch (err) {
-    throw new RunError(`Check failed: ${(err as Error).message}`, 502);
-  }
-
-  const latest =
-    (await prisma.keywordRun.findFirst({ where: { keywordId }, orderBy: { date: 'desc' } })) ??
-    (await prisma.keywordRun.create({
-      data: {
-        keywordId,
-        date: new Date(),
-        pinsTotal: await prisma.pin.count({ where: checkablePinsWhere(projectId) }),
-        pinsChecked: 0,
-      },
-    }));
-
-  const checkedAt = new Date();
-  await prisma.$transaction([
-    prisma.pinRankResult.upsert({
-      where: { runId_pinId: { runId: latest.id, pinId } },
-      create: { runId: latest.id, pinId, rank, checkedAt, entries: { create: entriesData(listings) } },
-      update: { rank, checkedAt, entries: { deleteMany: {}, create: entriesData(listings) } },
-    }),
-    prisma.pin.update({ where: { id: pinId }, data: { lastCheckedAt: checkedAt } }),
-  ]);
-
-  await recomputeRun(latest.id);
-  await refreshKeywordStats(keywordId);
-  await refreshProjectStats(projectId);
-  return latest.id;
+function mean(values: number[]): number | null {
+  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
 }

@@ -77,13 +77,14 @@ export function ProjectDetailPage() {
     }
   }
 
+  /** Starts the run, then opens the keyword's map to follow it pin by pin. */
   async function handleRunKeyword(keywordId: string) {
     if (!project) return;
     try {
       await api(`/api/projects/${project.id}/keywords/${keywordId}/run`, { method: 'POST' });
-      await reloadProject();
+      navigate(`/projects/${project.id}/keywords/${keywordId}/map`);
     } catch (err) {
-      setError(`Run failed: ${(err as Error).message}`);
+      setError(`Couldn't start the run: ${(err as Error).message}`);
     }
   }
 

@@ -1,4 +1,10 @@
-import type { KeywordRunSummary } from '../types/project';
+import type { KeywordRunSummary, RunStatus } from '../types/project';
+
+const STATUS_SUFFIX: Record<RunStatus, string> = {
+  Running: ' (running…)',
+  Completed: '',
+  Stopped: ' (stopped)',
+};
 
 function formatRunLabel(isoDate: string): string {
   return new Date(isoDate).toLocaleString('en-US', {
@@ -32,6 +38,7 @@ export function RunsDropdown({ runs, selectedRunId, onChange }: RunsDropdownProp
       {runs.map((run) => (
         <option key={run.id} value={run.id}>
           {formatRunLabel(run.date)}
+          {STATUS_SUFFIX[run.status]}
         </option>
       ))}
     </select>

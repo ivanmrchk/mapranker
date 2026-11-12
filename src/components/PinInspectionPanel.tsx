@@ -24,6 +24,7 @@ interface PinInspectionPanelProps {
   /** When this pin was checked in the viewed run; a change reloads the pin history. */
   resultCheckedAt: string | null;
   editing: boolean;
+  isRunInProgress: boolean;
   isChecking: boolean;
   onCheck: (pinId: string) => void;
   onToggleEnabled: (pinId: string) => void;
@@ -39,6 +40,7 @@ export function PinInspectionPanel({
   runId,
   resultCheckedAt,
   editing,
+  isRunInProgress,
   isChecking,
   onCheck,
   onToggleEnabled,
@@ -54,7 +56,9 @@ export function PinInspectionPanel({
 
   const checkBlockedReason = editing
     ? 'Save or cancel your pin edits first.'
-    : pin.isNew
+    : isRunInProgress
+      ? 'Wait for the run in progress to finish.'
+      : pin.isNew
       ? 'Save this pin before checking it.'
       : !pin.enabled
         ? 'Enable this pin to check it.'

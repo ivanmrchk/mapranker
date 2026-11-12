@@ -98,7 +98,7 @@ export function KeywordsCard({ keywords, onAdd, onDelete, onRun, onViewMap }: Ke
                         disabled={runningId === keyword.id}
                         className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        {runningId === keyword.id ? 'Running…' : 'Run'}
+                        {runningId === keyword.id ? 'Starting…' : 'Run'}
                       </button>
                       <button
                         type="button"

@@ -32,9 +32,13 @@ export interface Keyword {
   lastRun: string | null;
 }
 
+/** Running: pins are being checked in the background. Stopped: ended early (see stopReason). */
+export type RunStatus = 'Running' | 'Completed' | 'Stopped';
+
 export interface KeywordRunSummary {
   id: string;
   date: string;
+  status: RunStatus;
 }
 
 export interface PinRankPoint {
@@ -44,9 +48,8 @@ export interface PinRankPoint {
   checkedAt: string;
 }
 
-export interface KeywordRunDetail {
-  id: string;
-  date: string;
+export interface KeywordRunDetail extends KeywordRunSummary {
+  stopReason: string | null;
   pinsTotal: number;
   pinsChecked: number;
   avgRank: number | null;

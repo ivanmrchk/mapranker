@@ -41,21 +41,27 @@ not in git). Read it before starting work.
 ```
 src/                    React frontend (Vite, Tailwind v4, react-router, react-leaflet)
   components/             pages (*Page.tsx), cards, modals, map, pin panel
-  lib/                    api() fetch wrapper, grid math, rank display rules
-  types/project.ts        API response shapes (mirror the server serializers)
+  lib/                    api() fetch wrapper, grid math, rank display rules, run polling hook
+  types/project.ts        API response shapes (mirror routes/responses.ts)
 server/                 Express API (tsx in dev)
   prisma/
     schema.prisma         the schema
     migrations/           one folder per migration (the schema's history)
     seed.ts               demo project "Surge Electrical" (fictional)
   src/
-    routes/projects.ts    all HTTP endpoints + serializers
-    services/runs.ts      run all pins, check one pin, roll stats up to keyword/project
+    index.ts              composition root: picks the RankEngine, builds the RunManager
+    routes/projects.ts    projects, keywords, runs (read), pins, insights endpoints
+    routes/runs.ts        endpoints that use the engine: start/stop a run, check a pin
+    routes/responses.ts   serializers (the API's response shapes)
+    services/runManager.ts  one engine job at a time; runs pins in the background
+    services/runs.ts      store results, finish runs, roll stats up to keyword/project
     services/insights.ts  pin panel data: rank history, competitors, review growth
-    rank/engine.ts        RankEngine interface + simulated engine (scraper goes here)
+    rank/engine.ts        RankEngine / RankSession interfaces
+    rank/googleMapsEngine.ts  the Playwright scraper
+    rank/simulatedEngine.ts   fake results for development (+ simulatedBusinesses.ts data)
     lib/geo.ts            pin grid generation, address lookup (OSM Nominatim)
   scripts/
-    maps-spike.ts         Google Maps scraping proof of concept (Playwright)
+    check-rank.ts         runs the Google engine at points and prints what it read
     simulate-history.ts   backfills simulated weekly runs for a project
 ```
 
@@ -65,8 +71,10 @@ server/                 Express API (tsx in dev)
 # Postgres (host port 5433)
 docker compose up -d
 
-# API on :4001 (port 4000 is taken by the Local WordPress app on this machine)
+# API on :4001 (port 4000 is taken by the Local WordPress app on this machine).
+# Uses the simulated engine unless RANK_ENGINE=google (real Google Maps searches).
 PORT=4001 npm run dev:server
+RANK_ENGINE=google PORT=4001 npm run dev:server
 
 # Frontend on :5173, proxying /api to the API port
 API_PORT=4001 npm run dev
@@ -80,8 +88,8 @@ cd server && npx prisma migrate deploy && npx tsx prisma/seed.ts
 # Backfill 8 weeks of simulated runs (refuses if the project has older runs)
 cd server && npx tsx scripts/simulate-history.ts <projectId> 8
 
-# Scrape Maps results for a keyword at points (writes screenshots to SPIKE_OUT)
-cd server && npx tsx scripts/maps-spike.ts "electrician" 30.2672,-97.7431
+# Check that the scraper still reads Maps correctly (no database writes)
+cd server && npx tsx scripts/check-rank.ts "electrician" 30.2672,-97.7431 [--place ChIJ...]
 ```
 
 ### Creating a migration (non-interactive shells)
@@ -118,6 +126,11 @@ npx prisma migrate deploy && npx prisma generate
 - "Check this pin" replaces that pin's result in the keyword's **latest** run
   and recalculates; it never creates a new history entry (unless the keyword
   has no runs yet).
+- **Runs** (`KeywordRun.status`): `Running` while the `RunManager` checks pins
+  in the background (the frontend polls the run), then `Completed`, or
+  `Stopped` with a `stopReason` (stopped by the user, CAPTCHA, error, or a
+  server restart, which marks leftover `Running` runs stopped at start-up).
+  Keyword stats mirror the latest run that checked at least one pin.
 
 ## Rules
 
@@ -135,7 +148,9 @@ npx prisma migrate deploy && npx prisma generate
   `hl=en&gl=us` (results then don't depend on the machine's IP country).
   Ads ("Sponsored") never count toward rank. Pause between requests, and stop
   a run at the first CAPTCHA (`/sorry/` page) instead of retrying; leave the
-  remaining pins unchecked.
+  remaining pins unchecked. Engine work goes through the `RunManager`, which
+  allows one job (a run or a pin check) at a time: parallel searches from one
+  IP invite CAPTCHAs.
 - A failed check leaves the pin unchecked for that run; it is never recorded
   as "not found".
 - Business names and other scraped text are untrusted: render them through
