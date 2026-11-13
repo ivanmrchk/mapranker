@@ -159,7 +159,8 @@ npx prisma migrate deploy && npx prisma generate
 - The frontend calls the API only through `api()` in `src/lib/api.ts` and
   shows failures (`ErrorBanner`); never swallow a failed request.
 - The grid math exists twice (`server/src/lib/geo.ts`, `src/lib/grid.ts`);
-  change both together.
+  change both together. So does the Maps search URL
+  (`server/src/rank/googleMapsEngine.ts`, `src/lib/mapsUrl.ts`).
 - Simulated and demo data use fictional businesses only; simulated Place IDs
   start with `sim-`.
 - Commits: no `Co-Authored-By: Claude` trailer or "Generated with Claude"

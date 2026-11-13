@@ -108,6 +108,7 @@ async function searchMaps(page: Page, { keyword, lat, lng }: RankCheckInput): Pr
 
 function searchUrl(keyword: string, lat: number, lng: number): string {
   // hl/gl pin the language and country, so results don't depend on this machine's IP.
+  // The pin panel links to the same URL (src/lib/mapsUrl.ts): change both together.
   return `https://www.google.com/maps/search/${encodeURIComponent(keyword)}/@${lat},${lng},15z?hl=en&gl=us`;
 }
 

@@ -1,6 +1,7 @@
 import type { EditablePin } from './KeywordMapPage';
 import { rankColor, rankDescription, type PinRankState } from '../lib/rank';
 import { PinInsightsSection } from './PinInsightsSection';
+import { mapsSearchUrl } from '../lib/mapsUrl';
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
@@ -64,6 +65,8 @@ export function PinInspectionPanel({
         ? 'Enable this pin to check it.'
         : null;
 
+  const searchUrl = mapsSearchUrl(keywordText, pin.lat, pin.lng);
+
   return (
     <div className="p-5">
       <div className="flex items-center justify-between">
@@ -98,6 +101,22 @@ export function PinInspectionPanel({
             {pin.lat.toFixed(5)}, {pin.lng.toFixed(5)}
           </dd>
         </div>
+        {keywordText && (
+          <div>
+            <dt className="text-xs text-gray-400">Search URL</dt>
+            <dd>
+              <a
+                href={searchUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-blue-600 hover:underline"
+              >
+                Open in Google Maps {'↗︎'}
+              </a>
+              <p className="mt-0.5 break-all text-[11px] text-gray-400 select-all">{searchUrl}</p>
+            </dd>
+          </div>
+        )}
       </dl>
 
       <div className="mt-6">
