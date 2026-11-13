@@ -125,7 +125,9 @@ function CompetitorsTable({ insights }: { insights: PinInsights }) {
           <tr className="border-b border-gray-200 text-left text-[10px] font-semibold uppercase tracking-wide text-gray-400">
             <th className="pb-1.5 pr-2 font-semibold">#</th>
             <th className="pb-1.5 pr-2 font-semibold">Business</th>
-            <th className="pb-1.5 text-right font-semibold">Reviews</th>
+            <th className="pb-1.5 text-right font-semibold" title="Reviews on the business's Google profile">
+              Google Reviews
+            </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">

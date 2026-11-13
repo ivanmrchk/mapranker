@@ -99,7 +99,7 @@ async function searchMaps(page: Page, { keyword, lat, lng }: RankCheckInput): Pr
     .filter((card) => !isSponsored(card.text))
     .flatMap((card) => {
       const placeId = placeIdFromHref(card.href);
-      return placeId ? [{ placeId, name: card.name, ...parseRating(card) }] : [];
+      return placeId ? [{ placeId, name: card.name, ...parseRating(card.ratingLabel) }] : [];
     })
     .filter(firstOccurrenceOfPlace())
     .slice(0, MAX_TRACKED_RANK)
@@ -144,11 +144,14 @@ function placeIdFromHref(href: string): string | null {
   );
 }
 
-/** Rating and review count, from the stars label ("4.7 stars 151 Reviews") or the text ("4.7(151)"). */
-function parseRating({ ratingLabel, text }: { ratingLabel: string; text: string }) {
-  const fromLabel = ratingLabel.match(/([\d.]+)\s+stars?\s+([\d,]+)\s+reviews?/i);
-  const fromText = text.match(/(\d\.\d)\s*\(([\d,]+)\)/);
-  const match = fromLabel ?? fromText;
+/**
+ * Google rating and Google review count of the business profile, read only from the card's
+ * stars label ("4.7 stars 151 Reviews"). That label matched each profile's own Google review
+ * count in tests (2026-11-13); third-party "reviews from the web" are never part of it.
+ * Without the label we store nothing rather than guess from other numbers in the card.
+ */
+function parseRating(ratingLabel: string) {
+  const match = ratingLabel.match(/^\s*([\d.]+)\s+stars?\s+([\d,]+)\s+reviews?\s*$/i);
   if (!match) return { rating: null, reviewCount: null };
   return { rating: Number(match[1]), reviewCount: Number(match[2].replace(/,/g, '')) };
 }
