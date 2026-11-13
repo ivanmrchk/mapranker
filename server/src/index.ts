@@ -24,7 +24,7 @@ app.listen(port, () => {
   console.log(`Map Ranker API listening on http://localhost:${port} (rank engine: ${rankEngine.name})`);
 });
 
-/** RANK_ENGINE=google searches Google Maps; anything else (or unset) uses the simulator. */
+/** Real Google Maps searches, unless RANK_ENGINE=simulated (fake results for development). */
 function rankEngineFromEnv(setting: string | undefined): RankEngine {
-  return setting === 'google' ? googleMapsEngine : simulatedEngine;
+  return setting === 'simulated' ? simulatedEngine : googleMapsEngine;
 }

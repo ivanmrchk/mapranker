@@ -72,9 +72,10 @@ server/                 Express API (tsx in dev)
 docker compose up -d
 
 # API on :4001 (port 4000 is taken by the Local WordPress app on this machine).
-# Uses the simulated engine unless RANK_ENGINE=google (real Google Maps searches).
+# Searches Google Maps for real; RANK_ENGINE=simulated gives fake results for
+# development (use it when testing runs, so tests don't hit Google).
 PORT=4001 npm run dev:server
-RANK_ENGINE=google PORT=4001 npm run dev:server
+RANK_ENGINE=simulated PORT=4001 npm run dev:server
 
 # Frontend on :5173, proxying /api to the API port
 API_PORT=4001 npm run dev
