@@ -3,6 +3,7 @@ import type { PinCompetitor, PinInsights } from '../types/project';
 import { api } from '../lib/api';
 import { LineChart } from './LineChart';
 import { rankAxis } from '../lib/rank';
+import { businessProfileUrl } from '../lib/mapsUrl';
 
 /** A rank that wasn't in the top 20 is plotted one step below it. */
 const NOT_FOUND_VALUE = 21;
@@ -45,6 +46,23 @@ function RankHistoryChart({ history }: { history: PinInsights['history'] }) {
         formatValue={(v) => (v >= NOT_FOUND_VALUE ? 'Not in top 20' : `#${v}`)}
       />
     </div>
+  );
+}
+
+/** The business name, linked to its Google Maps profile when its ID allows one. */
+function BusinessName({ c }: { c: PinCompetitor }) {
+  const profileUrl = businessProfileUrl(c);
+  if (!profileUrl) return <>{c.name}</>;
+  return (
+    <a
+      href={profileUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      title="Open the Google Maps profile"
+      className="hover:underline"
+    >
+      {c.name}
+    </a>
   );
 }
 
@@ -119,7 +137,7 @@ function CompetitorsTable({ insights }: { insights: PinInsights }) {
               </td>
               <td className="py-1.5 pr-2 align-top">
                 <div className={`leading-tight ${c.isYou ? 'font-bold text-blue-700' : 'font-medium text-gray-900'}`}>
-                  {c.name}
+                  <BusinessName c={c} />
                   {c.isYou && <span className="font-normal text-blue-500"> (you)</span>}
                 </div>
                 {c.rating !== null && (
