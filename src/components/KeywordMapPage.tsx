@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type {
   KeywordDetail,
@@ -10,7 +10,7 @@ import type {
   ProjectDetail,
 } from '../types/project';
 import { api } from '../lib/api';
-import { generateGrid, type LatLng } from '../lib/grid';
+import { detectGrid, generateGrid, snapToGrid, type GridLattice, type LatLng } from '../lib/grid';
 import type { PinRankState } from '../lib/rank';
 import { StatTile } from './StatTile';
 import { RunsDropdown } from './RunsDropdown';
@@ -35,6 +35,13 @@ function newPin(point: LatLng): EditablePin {
     lastCheckedAt: null,
     isNew: true,
   };
+}
+
+/** True when two points are the same grid point (closer than a hundredth of a step). */
+function isSamePoint(a: LatLng, b: LatLng, lattice: GridLattice): boolean {
+  return (
+    Math.abs(a.lat - b.lat) < lattice.latStep / 100 && Math.abs(a.lng - b.lng) < lattice.lngStep / 100
+  );
 }
 
 export function KeywordMapPage() {
@@ -64,6 +71,8 @@ export function KeywordMapPage() {
   const [fitKey, setFitKey] = useState(0);
   const [checkingPinId, setCheckingPinId] = useState<string | null>(null);
   const mapCenter = useRef<LatLng | null>(null);
+  // The grid the pins were laid out on, shown while editing so new pins can extend it.
+  const gridLattice = useMemo(() => (editing ? detectGrid(pins) : null), [editing, pins]);
 
   useEffect(() => {
     let cancelled = false;
@@ -289,12 +298,22 @@ export function KeywordMapPage() {
     setPins((prev) => prev.map((p) => (p.id === pinId ? { ...p, lat, lng } : p)));
   }
 
+  /**
+   * Adds a pin where the map was clicked, snapped to the nearest grid point when the pins
+   * form a grid. Stays in "add" mode so several pins can be placed in a row. Clicking a grid
+   * point that already has a pin selects that pin instead of stacking a second one on it.
+   */
   function handleMapClick(lat: number, lng: number) {
     if (!editing || !placingPin) return;
-    const pin = newPin({ lat, lng });
+    const point = gridLattice ? snapToGrid({ lat, lng }, gridLattice) : { lat, lng };
+    const existing = gridLattice ? pins.find((p) => isSamePoint(p, point, gridLattice)) : undefined;
+    if (existing) {
+      setSelectedPinId(existing.id);
+      return;
+    }
+    const pin = newPin(point);
     setPins((prev) => [...prev, pin]);
     setSelectedPinId(pin.id);
-    setPlacingPin(false);
   }
 
   function handleToggleEnabled(pinId: string) {
@@ -350,7 +369,7 @@ export function KeywordMapPage() {
     return result.rank ?? 'notFound';
   }
 
-  const activeRun = activeRunId ? ([liveRun, run].find((r) => r?.id === activeRunId) ?? null) : null;
+  const activeRun = activeRunId ?([liveRun, run].find((r) => r?.id === activeRunId) ?? null) : null;
   const selectedPin = pins.find((p) => p.id === selectedPinId) ?? null;
   // Includes unsaved pins while editing, so the count matches what's on the map.
   const enabledPinCount = pins.filter((p) => p.enabled).length;
@@ -451,6 +470,13 @@ export function KeywordMapPage() {
         <div className="flex items-center gap-2">
           {editing ? (
             <>
+              <span className="mr-1 text-xs text-gray-500">
+                {gridLattice
+                  ? `${gridLattice.spacingKm} km grid${placingPin ? ': click a grid point to add a pin' : ''}`
+                  : placingPin
+                    ? 'Click the map to add a pin'
+                    : ''}
+              </span>
               <button
                 type="button"
                 onClick={handleOpenGrid}
@@ -467,7 +493,7 @@ export function KeywordMapPage() {
                     : 'border border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                {placingPin ? 'Click the map…' : 'Add Pin'}
+                {placingPin ? 'Done Adding' : 'Add Pins'}
               </button>
               <button
                 type="button"
@@ -526,6 +552,7 @@ export function KeywordMapPage() {
               business={business}
               editing={editing}
               placingPin={placingPin}
+              gridLattice={gridLattice}
               selectedPinId={selectedPinId}
               fitKey={fitKey}
               onSelectPin={setSelectedPinId}

@@ -3,7 +3,8 @@ import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-lea
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { EditablePin } from './KeywordMapPage';
-import type { LatLng } from '../lib/grid';
+import type { GridLattice, LatLng } from '../lib/grid';
+import { GridOverlay } from './GridOverlay';
 import { rankColor, rankMarkerText, type PinRankState } from '../lib/rank';
 
 const FALLBACK_CENTER: [number, number] = [39.8283, -98.5795];
@@ -96,6 +97,8 @@ interface PinMapProps {
   business: { lat: number; lng: number; label: string } | null;
   editing: boolean;
   placingPin: boolean;
+  /** Drawn as dotted lines across the map when set (while editing). */
+  gridLattice: GridLattice | null;
   selectedPinId: string | null;
   fitKey: number;
   onSelectPin: (pinId: string) => void;
@@ -110,6 +113,7 @@ export function PinMap({
   business,
   editing,
   placingPin,
+  gridLattice,
   selectedPinId,
   fitKey,
   onSelectPin,
@@ -133,6 +137,7 @@ export function PinMap({
         />
         <MapEvents onMapClick={onMapClick} onCenterChange={onCenterChange} />
         <FitToPins pins={pins} fitKey={fitKey} />
+        {gridLattice && <GridOverlay lattice={gridLattice} />}
         {business && (
           <Marker
             position={[business.lat, business.lng]}
