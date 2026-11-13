@@ -10,7 +10,7 @@ import type {
   ProjectDetail,
 } from '../types/project';
 import { api } from '../lib/api';
-import { detectGrid, generateGrid, snapToGrid, type GridLattice, type LatLng } from '../lib/grid';
+import { detectGrid, generateGrid, type GridLattice, type LatLng } from '../lib/grid';
 import type { PinRankState } from '../lib/rank';
 import { StatTile } from './StatTile';
 import { RunsDropdown } from './RunsDropdown';
@@ -299,13 +299,14 @@ export function KeywordMapPage() {
   }
 
   /**
-   * Adds a pin where the map was clicked, snapped to the nearest grid point when the pins
-   * form a grid. Stays in "add" mode so several pins can be placed in a row. Clicking a grid
-   * point that already has a pin selects that pin instead of stacking a second one on it.
+   * Adds a pin where the map was clicked (the map has already snapped it to a grid cross if
+   * the click was on one). Stays in "add" mode so several pins can be placed in a row.
+   * Clicking a grid cross that already has a pin selects that pin instead of stacking a
+   * second one on it.
    */
   function handleMapClick(lat: number, lng: number) {
     if (!editing || !placingPin) return;
-    const point = gridLattice ? snapToGrid({ lat, lng }, gridLattice) : { lat, lng };
+    const point = { lat, lng };
     const existing = gridLattice ? pins.find((p) => isSamePoint(p, point, gridLattice)) : undefined;
     if (existing) {
       setSelectedPinId(existing.id);
@@ -472,7 +473,7 @@ export function KeywordMapPage() {
             <>
               <span className="mr-1 text-xs text-gray-500">
                 {gridLattice
-                  ? `${gridLattice.spacingKm} km grid${placingPin ? ': click a grid point to add a pin' : ''}`
+                  ? `${gridLattice.spacingKm} km grid: pins dropped on a cross snap to it`
                   : placingPin
                     ? 'Click the map to add a pin'
                     : ''}

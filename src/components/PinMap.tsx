@@ -3,11 +3,13 @@ import { MapContainer, Marker, TileLayer, useMap, useMapEvents } from 'react-lea
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { EditablePin } from './KeywordMapPage';
-import type { GridLattice, LatLng } from '../lib/grid';
+import { snapToGrid, type GridLattice, type LatLng } from '../lib/grid';
 import { GridOverlay } from './GridOverlay';
 import { rankColor, rankMarkerText, type PinRankState } from '../lib/rank';
 
 const FALLBACK_CENTER: [number, number] = [39.8283, -98.5795];
+const PIN_SIZE_PX = 26;
+const SELECTED_PIN_SIZE_PX = 32;
 
 const iconCache = new Map<string, L.DivIcon>();
 
@@ -20,7 +22,7 @@ function pinIcon(
   if (cached) return cached;
 
   const text = rankMarkerText(state);
-  const size = selected ? 32 : 26;
+  const size = selected ? SELECTED_PIN_SIZE_PX : PIN_SIZE_PX;
   const color = rankColor(state);
   const border = isNew ? '2px dashed #2563eb' : '2px solid white';
   const ring = selected ? '0 0 0 3px #2563eb,' : '';
@@ -50,16 +52,38 @@ function boundsOf(pins: LatLng[]): L.LatLngBounds {
   return L.latLngBounds(pins.map((p) => [p.lat, p.lng] as [number, number]));
 }
 
+/**
+ * Where a pin placed at `point` should go: onto the nearest grid cross if that cross lies
+ * inside the pin's circle (`sizePx` across, as drawn at the current zoom), otherwise exactly
+ * at `point`. So pins snap only when dropped onto a cross, and can still go anywhere else.
+ */
+function snapToCrossUnderPin(
+  map: L.Map,
+  point: LatLng,
+  { lattice, sizePx }: { lattice: GridLattice | null; sizePx: number },
+): LatLng {
+  if (!lattice) return point;
+  const cross = snapToGrid(point, lattice);
+  const distancePx = map
+    .latLngToContainerPoint([point.lat, point.lng])
+    .distanceTo(map.latLngToContainerPoint([cross.lat, cross.lng]));
+  return distancePx <= sizePx / 2 ? cross : { lat: point.lat, lng: point.lng };
+}
+
 function MapEvents({
+  gridLattice,
   onMapClick,
   onCenterChange,
 }: {
+  gridLattice: GridLattice | null;
   onMapClick: (lat: number, lng: number) => void;
   onCenterChange: (center: LatLng) => void;
 }) {
   const map = useMapEvents({
     click(e) {
-      onMapClick(e.latlng.lat, e.latlng.lng);
+      // A newly added pin is drawn selected, so its circle is the larger one.
+      const point = snapToCrossUnderPin(map, e.latlng, { lattice: gridLattice, sizePx: SELECTED_PIN_SIZE_PX });
+      onMapClick(point.lat, point.lng);
     },
     moveend() {
       const c = map.getCenter();
@@ -127,15 +151,17 @@ export function PinMap({
     if (business) return { center: [business.lat, business.lng] as [number, number], zoom: 14 };
     return { center: FALLBACK_CENTER, zoom: 4 };
   });
+  // Needed to measure, in pixels, whether a dragged pin landed on a grid cross.
+  const [map, setMap] = useState<L.Map | null>(null);
 
   return (
     <div className={`h-full w-full ${placingPin ? 'cursor-crosshair' : ''}`}>
-      <MapContainer {...initialView} className="h-full w-full">
+      <MapContainer {...initialView} ref={setMap} className="h-full w-full">
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <MapEvents onMapClick={onMapClick} onCenterChange={onCenterChange} />
+        <MapEvents gridLattice={gridLattice} onMapClick={onMapClick} onCenterChange={onCenterChange} />
         <FitToPins pins={pins} fitKey={fitKey} />
         {gridLattice && <GridOverlay lattice={gridLattice} />}
         {business && (
@@ -160,8 +186,15 @@ export function PinMap({
             eventHandlers={{
               click: () => onSelectPin(pin.id),
               dragend: (e) => {
-                const pos = (e.target as L.Marker).getLatLng();
-                onDragPin(pin.id, pos.lat, pos.lng);
+                const marker = e.target as L.Marker;
+                const dropped = marker.getLatLng();
+                const point = map
+                  ? snapToCrossUnderPin(map, dropped, {
+                      lattice: gridLattice,
+                      sizePx: pin.id === selectedPinId ? SELECTED_PIN_SIZE_PX : PIN_SIZE_PX,
+                    })
+                  : dropped;
+                onDragPin(pin.id, point.lat, point.lng);
               },
             }}
           />
