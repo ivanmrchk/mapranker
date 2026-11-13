@@ -29,6 +29,8 @@ const PAUSE_BETWEEN_SEARCHES_MS = { min: 4000, max: 7000 } as const;
 const PAGE_LOAD_TIMEOUT_MS = 45_000;
 const FEED_TIMEOUT_MS = 20_000;
 const RESULT_LINKS = 'div[role="feed"] a[href*="/maps/place/"]';
+/** A place's feature ID (`0x…:0x…`) in a Maps link or page URL. */
+const FEATURE_ID_IN_URL = /!1s(0x[0-9a-f]+:0x[0-9a-f]+)/i;
 
 async function openSession(browser: Browser): Promise<RankSession> {
   const context = await browser.newContext({
@@ -57,7 +59,10 @@ async function openSession(browser: Browser): Promise<RankSession> {
   };
 }
 
-/** The organic results list for a search, top MAX_TRACKED_RANK, ads left out. */
+/**
+ * The organic results list for a search, top MAX_TRACKED_RANK, ads left out. When Google
+ * answers with a single business instead of a list, that business is the only result.
+ */
 async function searchMaps(page: Page, { keyword, lat, lng }: RankCheckInput): Promise<MapsListing[]> {
   await page.goto(searchUrl(keyword, lat, lng), {
     waitUntil: 'domcontentloaded',
@@ -72,13 +77,7 @@ async function searchMaps(page: Page, { keyword, lat, lng }: RankCheckInput): Pr
     throw new RankEngineBlockedError('Google asked for a CAPTCHA');
   }
 
-  try {
-    await page.waitForSelector(RESULT_LINKS, { timeout: FEED_TIMEOUT_MS });
-  } catch {
-    // No list means we can't tell where the business ranks; that's a failed check, never
-    // "not found".
-    throw new Error(`No results list on the page (${page.url().slice(0, 120)})`);
-  }
+  if ((await waitForResults(page)) === 'singlePlace') return [await readSinglePlace(page)];
   await loadEnoughResults(page);
 
   const cards = await page.$$eval(RESULT_LINKS, (links) =>
@@ -112,6 +111,48 @@ function searchUrl(keyword: string, lat: number, lng: number): string {
   return `https://www.google.com/maps/search/${encodeURIComponent(keyword)}/@${lat},${lng},15z?hl=en&gl=us`;
 }
 
+/**
+ * Waits for the results: a list, or a single business. Google skips the list and opens one
+ * profile when a search clearly points at that business (e.g. "Issaquah Electrician" near
+ * the business). Neither within the timeout is a failed check, never "not found".
+ */
+async function waitForResults(page: Page): Promise<'list' | 'singlePlace'> {
+  try {
+    // Runs in the page; a string, since this server code isn't type-checked against the DOM.
+    await page.waitForFunction(
+      `document.querySelector(${JSON.stringify(RESULT_LINKS)}) !== null || location.pathname.includes('/maps/place/')`,
+      null,
+      { timeout: FEED_TIMEOUT_MS },
+    );
+  } catch {
+    throw new Error(`No results on the page (${page.url().slice(0, 120)})`);
+  }
+  return (await page.locator(RESULT_LINKS).count()) > 0 ? 'list' : 'singlePlace';
+}
+
+/** The one business Google opened instead of a list. It's all the searcher sees: position 1. */
+async function readSinglePlace(page: Page): Promise<MapsListing> {
+  const featureId = decodeURIComponent(page.url()).match(FEATURE_ID_IN_URL)?.[1];
+  if (!featureId) throw new Error(`Couldn't identify the business on ${page.url().slice(0, 120)}`);
+
+  const panel = page.locator('div[role="main"]').filter({ has: page.locator('h1') }).first();
+  await panel.locator('h1').filter({ hasText: /\S/ }).first().waitFor({ timeout: FEED_TIMEOUT_MS });
+  // The rating appears a moment after the name; a business without reviews never shows one.
+  await panel.locator('[aria-label$="reviews" i], [aria-label$="review" i]').first()
+    .waitFor({ timeout: 3000 })
+    .catch(() => {});
+  const { name, labels } = await panel.evaluate((el) => ({
+    name: el.querySelector('h1')?.textContent ?? '',
+    labels: [...el.querySelectorAll('[aria-label]')].map((e) => e.getAttribute('aria-label') ?? ''),
+  }));
+  return {
+    position: 1,
+    placeId: placeIdFromFeatureId(featureId),
+    name: name.trim(),
+    ...parseProfileRating(labels),
+  };
+}
+
 /** The list shows ~20 results at first; scroll it until there are enough organic ones or it ends. */
 async function loadEnoughResults(page: Page) {
   const feed = page.locator('div[role="feed"]');
@@ -132,16 +173,43 @@ function isSponsored(cardText: string): boolean {
 }
 
 /**
- * The Place ID (`ChIJ…`) sits after `!19s` in the result link. When a link has none, the
- * feature ID (`0x…:0x…`, after `!1s`) still identifies the place consistently between scans.
+ * The Place ID (`ChIJ…`) sits after `!19s` in the result link. When a link has none, it's
+ * derived from the feature ID (`0x…:0x…`, after `!1s`).
  */
 function placeIdFromHref(href: string): string | null {
   const decoded = decodeURIComponent(href);
-  return (
-    decoded.match(/!19s(ChIJ[^!?&]+)/)?.[1] ??
-    decoded.match(/!1s(0x[0-9a-f]+:0x[0-9a-f]+)/i)?.[1] ??
-    null
-  );
+  const placeId = decoded.match(/!19s(ChIJ[^!?&]+)/)?.[1];
+  if (placeId) return placeId;
+  const featureId = decoded.match(FEATURE_ID_IN_URL)?.[1];
+  return featureId ? placeIdFromFeatureId(featureId) : null;
+}
+
+/**
+ * A `ChIJ…` Place ID is the feature ID's two 64-bit numbers in a tiny protobuf message
+ * (field 1 and 2, fixed64), base64url-encoded. Converting means every result is stored by
+ * Place ID, so it always matches the tracked business's Place ID, however Google linked it.
+ */
+function placeIdFromFeatureId(featureId: string): string {
+  const [first, second] = featureId.split(':').map((hex) => BigInt(hex));
+  const bytes = Buffer.alloc(20);
+  bytes.set([0x0a, 0x12, 0x09], 0); // message of 18 bytes; field 1 (fixed64) follows
+  bytes.writeBigUInt64LE(first, 3);
+  bytes[11] = 0x11; // field 2 (fixed64)
+  bytes.writeBigUInt64LE(second, 12);
+  return bytes.toString('base64url');
+}
+
+/**
+ * Google rating and review count from a business profile's labels ("4.9 stars ", then
+ * "226 reviews"): the profile's own Google reviews, as in the results list.
+ */
+function parseProfileRating(labels: string[]) {
+  const rating = labels.map((l) => l.match(/^\s*([\d.]+)\s+stars?\s*$/i)).find(Boolean);
+  const reviews = labels.map((l) => l.match(/^\s*([\d,]+)\s+reviews?\s*$/i)).find(Boolean);
+  return {
+    rating: rating ? Number(rating[1]) : null,
+    reviewCount: reviews ? Number(reviews[1].replace(/,/g, '')) : null,
+  };
 }
 
 /**
