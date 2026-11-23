@@ -114,6 +114,11 @@ export interface ProjectCompetitor {
   visibility: number;
   /** % of all pin checks where the business is in the top 20. */
   top20Share: number;
+  /**
+   * Change in average rank since about a week earlier, over the pin checks made both times
+   * (positive spotsGained: moved up); null when not seen at any of them.
+   */
+  movement: { before: number; now: number; spotsGained: number } | null;
   rating: number | null;
   reviewCount: number | null;
   /** When reviewCount was seen. */
@@ -126,6 +131,8 @@ export interface ProjectCompetitor {
 export interface ProjectCompetitors {
   /** The scans compared: each scanned keyword's latest. */
   scans: { date: string; pinsChecked: number }[];
+  /** What movement is measured on; daysApart is null when nothing can be compared yet. */
+  comparison: { pinChecksCompared: number; keywordsCompared: number; daysApart: number | null };
   competitors: ProjectCompetitor[];
 }
 

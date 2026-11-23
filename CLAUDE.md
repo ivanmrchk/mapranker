@@ -57,6 +57,7 @@ server/                 Express API (tsx in dev)
     services/runs.ts      store results, finish runs, roll stats up to keyword/project
     services/insights.ts  pin panel data: rank history, competitors, review growth
     services/competitors.ts  project-level competitors from the latest scans
+    services/rankMovement.ts  average-rank change on pin checks made both times
     services/reviewBaselines.ts  earlier review counts that growth is measured from
     rank/engine.ts        RankEngine / RankSession interfaces
     rank/googleMapsEngine.ts  the Playwright scraper

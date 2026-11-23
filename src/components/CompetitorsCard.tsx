@@ -2,13 +2,15 @@ import { useEffect, useState } from 'react';
 import type { ProjectCompetitor, ProjectCompetitors } from '../types/project';
 import { api } from '../lib/api';
 import { BusinessName } from './BusinessName';
+import { RankMovement } from './RankMovement';
 import { ReviewChange } from './ReviewChange';
 
-type SortKey = 'avgRank' | 'visibility' | 'top20Share' | 'reviewCount' | 'reviewChange';
+type SortKey = 'avgRank' | 'movement' | 'visibility' | 'top20Share' | 'reviewCount' | 'reviewChange';
 
 const COLUMNS: readonly { key: SortKey; label: string; hint: string }[] = [
   { key: 'visibility', label: 'Visibility', hint: '% of pins in the top 3, averaged over keywords' },
   { key: 'avgRank', label: 'Avg Rank', hint: 'Averaged over keywords; a pin outside the top 20 counts as 21' },
+  { key: 'movement', label: 'Movement', hint: 'Spots gained or lost in average rank, on the pins scanned both times' },
   { key: 'top20Share', label: 'In Top 20', hint: '% of all pin checks where the business is in the top 20' },
   { key: 'reviewCount', label: 'Google Reviews', hint: "Reviews on the business's Google profile" },
   { key: 'reviewChange', label: 'Review Growth', hint: 'Change since the scan closest to a week earlier' },
@@ -71,6 +73,7 @@ function CompetitorsTable({ data }: { data: ProjectCompetitors }) {
   return (
     <>
       <p className="mt-1 text-sm text-gray-400">{describeScans(data)} Click a column to sort by it.</p>
+      <p className="text-sm text-gray-400">{describeComparison(data)}</p>
       {!youListed && (
         <p className="mt-3 rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-500">
           Your business isn't in the top 20 at any pin in these scans.
@@ -132,6 +135,9 @@ function CompetitorRow({ competitor: c, place }: { competitor: ProjectCompetitor
       </td>
       <td className="py-3 pr-3 text-gray-700">{c.visibility}%</td>
       <td className="py-3 pr-3 text-gray-700">#{c.avgRank}</td>
+      <td className="py-3 pr-3">
+        <RankMovement movement={c.movement} />
+      </td>
       <td className="py-3 pr-3 text-gray-700">{c.top20Share}%</td>
       <td className="py-3 pr-3 text-gray-700">{c.reviewCount?.toLocaleString('en-US') ?? '—'}</td>
       <td className="py-3 pr-3 text-gray-700">
@@ -147,13 +153,17 @@ function CompetitorRow({ competitor: c, place }: { competitor: ProjectCompetitor
 
 /** Best first: a lower average rank is better, everything else higher. Missing values go last. */
 function compareBestFirst(a: ProjectCompetitor, b: ProjectCompetitor, key: SortKey): number {
-  const [valueA, valueB] = [a[key], b[key]];
+  const [valueA, valueB] = [sortValue(a, key), sortValue(b, key)];
   if (valueA === null || valueB === null) {
     if (valueA !== valueB) return valueA === null ? 1 : -1;
   } else if (valueA !== valueB) {
     return key === 'avgRank' ? valueA - valueB : valueB - valueA;
   }
   return a.avgRank - b.avgRank || a.name.localeCompare(b.name);
+}
+
+function sortValue(competitor: ProjectCompetitor, key: SortKey): number | null {
+  return key === 'movement' ? (competitor.movement?.spotsGained ?? null) : competitor[key];
 }
 
 function sortAria(key: SortKey, sortKey: SortKey) {
@@ -168,6 +178,13 @@ function describeScans({ scans }: ProjectCompetitors): string {
   const when = oldest === newest ? oldest : `${oldest} – ${newest}`;
   const keywords = scans.length === 1 ? '1 keyword' : `${scans.length} keywords`;
   return `Latest scan of ${keywords} (${when}), ${pinChecks} pin checks.`;
+}
+
+function describeComparison({ scans, comparison }: ProjectCompetitors): string {
+  const { pinChecksCompared, keywordsCompared, daysApart } = comparison;
+  if (daysApart === null) return 'Movement shows once a keyword has been scanned on two different days.';
+  const days = daysApart <= 1 ? 'a day' : `${daysApart} days`;
+  return `Movement compares with about ${days} earlier: ${pinChecksCompared} pin checks made both times, in ${keywordsCompared} of ${scans.length} keywords.`;
 }
 
 function shortDay(iso: string): string {

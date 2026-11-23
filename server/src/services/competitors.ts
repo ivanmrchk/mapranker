@@ -1,5 +1,6 @@
 import { prisma } from '../prisma.js';
 import { mean, round1 } from '../lib/numbers.js';
+import { findRankMovement, padWithNotFound, type RankMovement } from './rankMovement.js';
 import { findReviewBaselines } from './reviewBaselines.js';
 import { RunError, latestScanArgs, runMetrics } from './runs.js';
 
@@ -13,6 +14,8 @@ export interface ProjectCompetitor {
   visibility: number;
   /** % of all pin checks where the business is in the top 20. */
   top20Share: number;
+  /** Change in average rank since about a week earlier; null when not seen on the pins scanned both times. */
+  movement: RankMovement | null;
   rating: number | null;
   reviewCount: number | null;
   /** When reviewCount was seen. */
@@ -64,10 +67,13 @@ export async function getProjectCompetitors(projectId: string) {
 
   const scans = project.keywords.flatMap((k) => k.runs);
   const sightingsByPlace = collectSightings(scans);
-  const baselines = await findReviewBaselines(
-    projectId,
-    [...sightingsByPlace].map(([placeId, s]) => ({ placeId, scannedAt: s.latestAt })),
-  );
+  const [baselines, { movementByPlace, ...comparison }] = await Promise.all([
+    findReviewBaselines(
+      projectId,
+      [...sightingsByPlace].map(([placeId, s]) => ({ placeId, scannedAt: s.latestAt })),
+    ),
+    findRankMovement(scans.map((s) => s.id)),
+  ]);
 
   const competitors: ProjectCompetitor[] = [...sightingsByPlace].map(([placeId, sightings]) => {
     const { latest, latestAt } = sightings;
@@ -77,6 +83,7 @@ export async function getProjectCompetitors(projectId: string) {
       name: latest.name,
       isYou: placeId === project.placeId,
       ...rankMetrics(scans, sightings),
+      movement: movementByPlace.get(placeId) ?? null,
       rating: latest.rating,
       reviewCount: latest.reviewCount,
       reviewsSeenAt: latestAt.toISOString(),
@@ -88,6 +95,7 @@ export async function getProjectCompetitors(projectId: string) {
 
   return {
     scans: scans.map((s) => ({ date: s.date.toISOString(), pinsChecked: s.results.length })),
+    comparison,
     competitors,
   };
 }
@@ -115,11 +123,9 @@ function collectSightings(scans: readonly Scan[]): Map<string, Sightings> {
 }
 
 function rankMetrics(scans: readonly Scan[], { positionsByScan }: Sightings) {
-  const perScan = scans.map((scan, i) => {
-    const found = positionsByScan[i].map((rank) => ({ rank }));
-    const notFound = Array.from({ length: scan.results.length - found.length }, () => ({ rank: null }));
-    return runMetrics([...found, ...notFound]);
-  });
+  const perScan = scans.map((scan, i) =>
+    runMetrics(padWithNotFound(positionsByScan[i], scan.results.length)),
+  );
   const pinChecks = scans.reduce((total, scan) => total + scan.results.length, 0);
   return {
     // Scans always have checked pins (latestScanArgs), so these are never null.
