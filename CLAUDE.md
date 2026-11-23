@@ -56,10 +56,13 @@ server/                 Express API (tsx in dev)
     services/runManager.ts  one engine job at a time; runs pins in the background
     services/runs.ts      store results, finish runs, roll stats up to keyword/project
     services/insights.ts  pin panel data: rank history, competitors, review growth
+    services/competitors.ts  project-level competitors from the latest scans
+    services/reviewBaselines.ts  earlier review counts that growth is measured from
     rank/engine.ts        RankEngine / RankSession interfaces
     rank/googleMapsEngine.ts  the Playwright scraper
     rank/simulatedEngine.ts   fake results for development (+ simulatedBusinesses.ts data)
     lib/geo.ts            pin grid generation, address lookup (OSM Nominatim)
+    lib/numbers.ts        rounding and averages
   scripts/
     check-rank.ts         runs the Google engine at points and prints what it read
     simulate-history.ts   backfills simulated weekly runs for a project

@@ -1,7 +1,6 @@
 // The API's response shapes (mirrored by src/types/project.ts in the frontend).
 import type { Response } from 'express';
 import type {
-  Competitor as PrismaCompetitor,
   Keyword as PrismaKeyword,
   KeywordRun as PrismaKeywordRun,
   Pin,
@@ -10,6 +9,7 @@ import type {
   RankSnapshot,
 } from '@prisma/client';
 import { prisma } from '../prisma.js';
+import { round1 } from '../lib/numbers.js';
 import { RunError } from '../services/runs.js';
 
 export function serializeProject(p: PrismaProject, keywordCount: number) {
@@ -36,7 +36,6 @@ export function serializeProjectDetail(
     pins: Pin[];
     rankSnapshots: RankSnapshot[];
     keywords: (PrismaKeyword & { runs: { date: Date }[] })[];
-    competitors: PrismaCompetitor[];
   },
 ) {
   const enabledPins = p.pins.filter((pin) => pin.enabled);
@@ -53,7 +52,6 @@ export function serializeProjectDetail(
       ...serializeKeyword(k),
       lastScannedAt: k.runs[0]?.date.toISOString() ?? null,
     })),
-    competitors: p.competitors.map(serializeCompetitor),
   };
 }
 
@@ -115,18 +113,6 @@ export function sendRunError(res: Response, err: unknown) {
   return false;
 }
 
-function serializeCompetitor(c: PrismaCompetitor) {
-  return {
-    id: c.id,
-    name: c.name,
-    placeId: c.placeId,
-    avgRank: c.avgRank,
-    visibility: c.visibility,
-    reviewCount: c.reviewCount,
-    reviewGrowthPerWeek: c.reviewGrowthPerWeek,
-  };
-}
-
 /** Change since the keyword's previous run that has numbers. */
 async function computeRunTrends(run: PrismaKeywordRun) {
   const previous = await prisma.keywordRun.findFirst({
@@ -141,8 +127,4 @@ async function computeRunTrends(run: PrismaKeywordRun) {
         ? round1(run.visibility - previous.visibility)
         : null,
   };
-}
-
-function round1(n: number) {
-  return Math.round(n * 10) / 10;
 }

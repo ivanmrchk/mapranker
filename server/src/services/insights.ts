@@ -1,12 +1,6 @@
-import type { Prisma } from '@prisma/client';
 import { prisma } from '../prisma.js';
+import { findReviewBaselines } from './reviewBaselines.js';
 import { RunError } from './runs.js';
-
-const HOUR_MS = 3_600_000;
-/** Review change is measured over about this long, as closely as past scans allow. */
-const REVIEW_COMPARISON_MS = 7 * 24 * HOUR_MS;
-/** Counts newer than this are the same scan session (other pins, other keywords), not history. */
-const MIN_REVIEW_BASELINE_AGE_MS = 12 * HOUR_MS;
 
 export interface PinCompetitor {
   position: number;
@@ -77,14 +71,13 @@ export async function getPinInsights(
   });
   const previousPositions = new Map(previous?.entries.map((e) => [e.placeId, e.position]));
 
-  const reviewBaselines = await Promise.all(
-    scan.entries.map((e) =>
-      findReviewBaseline({ projectId, placeId: e.placeId, scannedAt: scan.checkedAt }),
-    ),
+  const reviewBaselines = await findReviewBaselines(
+    projectId,
+    scan.entries.map((e) => ({ placeId: e.placeId, scannedAt: scan.checkedAt })),
   );
 
-  const competitors: PinCompetitor[] = scan.entries.map((e, i) => {
-    const baseline = reviewBaselines[i];
+  const competitors: PinCompetitor[] = scan.entries.map((e) => {
+    const baseline = reviewBaselines.get(e.placeId);
     return {
       position: e.position,
       previousPosition: previousPositions.get(e.placeId) ?? null,
@@ -108,42 +101,4 @@ export async function getPinInsights(
       : null,
     competitors,
   };
-}
-
-/**
- * The review count to compare a scan with: the one seen closest to a week earlier, at any pin
- * or keyword of the project. There's no limit on how old it may be, so growth still shows
- * after a longer gap between runs.
- */
-async function findReviewBaseline({
-  projectId,
-  placeId,
-  scannedAt,
-}: {
-  projectId: string;
-  placeId: string;
-  scannedAt: Date;
-}) {
-  const aWeekEarlier = new Date(scannedAt.getTime() - REVIEW_COMPARISON_MS);
-  const newestAllowed = new Date(scannedAt.getTime() - MIN_REVIEW_BASELINE_AGE_MS);
-  const findSighting = (checkedAt: Prisma.DateTimeFilter, order: Prisma.SortOrder) =>
-    prisma.pinResultEntry.findFirst({
-      where: {
-        placeId,
-        reviewCount: { not: null },
-        result: { checkedAt, run: { keyword: { projectId } } },
-      },
-      orderBy: { result: { checkedAt: order } },
-      select: { reviewCount: true, result: { select: { checkedAt: true } } },
-    });
-
-  const sightings = await Promise.all([
-    findSighting({ lte: aWeekEarlier }, 'desc'),
-    findSighting({ gt: aWeekEarlier, lte: newestAllowed }, 'asc'),
-  ]);
-  const distanceFromAWeek = (seenAt: Date) => Math.abs(seenAt.getTime() - aWeekEarlier.getTime());
-  const [closest] = sightings
-    .flatMap((s) => (s ? [{ reviewCount: s.reviewCount!, seenAt: s.result.checkedAt }] : []))
-    .sort((a, b) => distanceFromAWeek(a.seenAt) - distanceFromAWeek(b.seenAt));
-  return closest ?? null;
 }

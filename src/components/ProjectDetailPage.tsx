@@ -204,7 +204,9 @@ export function ProjectDetailPage() {
         />
       )}
 
-      {!isLoading && project && <CompetitorsCard competitors={project.competitors} />}
+      {!isLoading && project && (
+        <CompetitorsCard projectId={project.id} keywordCount={project.keywords.length} />
+      )}
 
       {isEditing && project && (
         <EditProjectModal

@@ -2,7 +2,8 @@ import { Router } from 'express';
 import { Prisma, ProjectStatus } from '@prisma/client';
 import { prisma } from '../prisma.js';
 import { generateGrid, geocodeAddress } from '../lib/geo.js';
-import { checkablePinsWhere, refreshProjectStats } from '../services/runs.js';
+import { checkablePinsWhere, latestScanArgs, refreshProjectStats } from '../services/runs.js';
+import { getProjectCompetitors } from '../services/competitors.js';
 import { getPinInsights } from '../services/insights.js';
 import {
   sendRunError,
@@ -26,17 +27,8 @@ function loadProjectDetail(id: string) {
       rankSnapshots: { orderBy: { date: 'asc' } },
       keywords: {
         orderBy: { createdAt: 'asc' },
-        // The run the keyword's stats come from: the latest finished one that checked anything.
-        include: {
-          runs: {
-            where: { status: { not: 'Running' }, pinsChecked: { gt: 0 } },
-            orderBy: { date: 'desc' },
-            take: 1,
-            select: { date: true },
-          },
-        },
+        include: { runs: { ...latestScanArgs, select: { date: true } } },
       },
-      competitors: { orderBy: { avgRank: 'asc' } },
     },
   });
 }
@@ -143,6 +135,14 @@ router.delete('/:id', async (req, res) => {
       return;
     }
     throw err;
+  }
+});
+
+router.get('/:id/competitors', async (req, res) => {
+  try {
+    res.json(await getProjectCompetitors(req.params.id));
+  } catch (err) {
+    if (!sendRunError(res, err)) throw err;
   }
 });
 

@@ -82,22 +82,11 @@ export interface KeywordRunResult {
   run: KeywordRunDetail;
 }
 
-export interface Competitor {
-  id: string;
-  name: string;
-  placeId: string | null;
-  avgRank: number | null;
-  visibility: number | null;
-  reviewCount: number | null;
-  reviewGrowthPerWeek: number | null;
-}
-
 export interface ProjectDetail extends Project {
   pinsTracked: number;
   pinsTotal: number;
   rankHistory: RankHistoryPoint[];
   keywords: ProjectKeyword[];
-  competitors: Competitor[];
 }
 
 export interface NewProjectInput {
@@ -113,6 +102,31 @@ export interface ProjectUpdateInput {
   placeId?: string;
   address?: string;
   status?: ProjectStatus;
+}
+
+export interface ProjectCompetitor {
+  placeId: string;
+  name: string;
+  isYou: boolean;
+  /** Mean over keywords; a pin where the business isn't in the top 20 counts as 21. */
+  avgRank: number;
+  /** Mean over keywords of the % of pins in the top 3. */
+  visibility: number;
+  /** % of all pin checks where the business is in the top 20. */
+  top20Share: number;
+  rating: number | null;
+  reviewCount: number | null;
+  /** When reviewCount was seen. */
+  reviewsSeenAt: string;
+  /** Reviews gained (negative: lost) since reviewsSince; null without an earlier observation. */
+  reviewChange: number | null;
+  reviewsSince: string | null;
+}
+
+export interface ProjectCompetitors {
+  /** The scans compared: each scanned keyword's latest. */
+  scans: { date: string; pinsChecked: number }[];
+  competitors: ProjectCompetitor[];
 }
 
 export interface PinCompetitor {

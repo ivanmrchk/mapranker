@@ -3,11 +3,11 @@ import type { PinCompetitor, PinInsights } from '../types/project';
 import { api } from '../lib/api';
 import { LineChart } from './LineChart';
 import { rankAxis } from '../lib/rank';
-import { businessProfileUrl } from '../lib/mapsUrl';
+import { BusinessName } from './BusinessName';
+import { ReviewChange } from './ReviewChange';
 
 /** A rank that wasn't in the top 20 is plotted one step below it. */
 const NOT_FOUND_VALUE = 21;
-const DAY_MS = 86_400_000;
 
 function shortDate(iso: string) {
   const d = new Date(iso);
@@ -50,23 +50,6 @@ function RankHistoryChart({ history }: { history: PinInsights['history'] }) {
   );
 }
 
-/** The business name, linked to its Google Maps profile when its ID allows one. */
-function BusinessName({ c }: { c: PinCompetitor }) {
-  const profileUrl = businessProfileUrl(c);
-  if (!profileUrl) return <>{c.name}</>;
-  return (
-    <a
-      href={profileUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      title="Open the Google Maps profile"
-      className="hover:underline"
-    >
-      {c.name}
-    </a>
-  );
-}
-
 function Movement({ c, hasPrevious }: { c: PinCompetitor; hasPrevious: boolean }) {
   if (!hasPrevious) return null;
   if (c.isNew) {
@@ -86,24 +69,6 @@ function Movement({ c, hasPrevious }: { c: PinCompetitor; hasPrevious: boolean }
       {by}
     </span>
   );
-}
-
-/** How much the review count changed, and over how many days (scans aren't always a week apart). */
-function ReviewChange({ c, scannedAt }: { c: PinCompetitor; scannedAt: string }) {
-  if (c.reviewChange === null || c.reviewsSince === null) return null;
-  const days = Math.max(1, Math.round((Date.parse(scannedAt) - Date.parse(c.reviewsSince)) / DAY_MS));
-  const { text, color } = reviewChangeDisplay(c.reviewChange);
-  return (
-    <div className="text-[11px]" title={`Since ${longDate(c.reviewsSince)}`}>
-      <span className={color}>{text}</span> <span className="text-[10px] text-gray-400">in {days}d</span>
-    </div>
-  );
-}
-
-function reviewChangeDisplay(change: number): { text: string; color: string } {
-  if (change > 0) return { text: `▲${change}`, color: 'font-semibold text-green-600' };
-  if (change < 0) return { text: `▼${-change}`, color: 'font-semibold text-red-500' };
-  return { text: '+0', color: 'text-gray-400' };
 }
 
 function CompetitorsTable({ insights }: { insights: PinInsights }) {
@@ -145,7 +110,7 @@ function CompetitorsTable({ insights }: { insights: PinInsights }) {
               </td>
               <td className="py-1.5 pr-2 align-top">
                 <div className={`leading-tight ${c.isYou ? 'font-bold text-blue-700' : 'font-medium text-gray-900'}`}>
-                  <BusinessName c={c} />
+                  <BusinessName business={c} />
                   {c.isYou && <span className="font-normal text-blue-500"> (you)</span>}
                 </div>
                 {c.rating !== null && (
@@ -154,7 +119,7 @@ function CompetitorsTable({ insights }: { insights: PinInsights }) {
               </td>
               <td className="whitespace-nowrap py-1.5 pr-1 text-right align-top">
                 <div className="text-gray-700">{c.reviewCount ?? '—'}</div>
-                <ReviewChange c={c} scannedAt={scan.checkedAt} />
+                <ReviewChange change={c.reviewChange} since={c.reviewsSince} seenAt={scan.checkedAt} />
               </td>
             </tr>
           ))}

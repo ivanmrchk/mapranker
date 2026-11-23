@@ -1,4 +1,6 @@
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../prisma.js';
+import { mean, round1 } from '../lib/numbers.js';
 import { MAX_TRACKED_RANK, type MapsListing, type RankCheckResult } from '../rank/engine.js';
 
 /** Nested-create data for a check's results list. */
@@ -16,6 +18,13 @@ export function entriesData(listings: MapsListing[]) {
 export function checkablePinsWhere(projectId: string) {
   return { projectId, deletedAt: null, enabled: true };
 }
+
+/** A keyword's latest finished run that checked anything: the one its stats come from. */
+export const latestScanArgs = {
+  where: { status: { not: 'Running' }, pinsChecked: { gt: 0 } },
+  orderBy: { date: 'desc' },
+  take: 1,
+} satisfies Prisma.KeywordRunFindManyArgs;
 
 export class RunError extends Error {
   constructor(
@@ -210,14 +219,6 @@ export async function refreshProjectStats(projectId: string) {
   ]);
 }
 
-function round1(n: number): number {
-  return Math.round(n * 10) / 10;
-}
-
 function todayDate(): Date {
   return new Date(new Date().toISOString().slice(0, 10));
-}
-
-function mean(values: number[]): number | null {
-  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
 }
