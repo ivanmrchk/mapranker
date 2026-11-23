@@ -59,7 +59,11 @@ export function ProjectDetailPage() {
       });
       setProject((prev) =>
         prev
-          ? { ...prev, keywords: [...prev.keywords, keyword], keywordCount: prev.keywordCount + 1 }
+          ? {
+              ...prev,
+              keywords: [...prev.keywords, { ...keyword, lastScannedAt: null }],
+              keywordCount: prev.keywordCount + 1,
+            }
           : prev,
       );
     } catch (err) {

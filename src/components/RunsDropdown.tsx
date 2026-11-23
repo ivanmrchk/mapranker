@@ -1,20 +1,11 @@
 import type { KeywordRunSummary, RunStatus } from '../types/project';
+import { formatDateTime } from '../lib/formatDateTime';
 
 const STATUS_SUFFIX: Record<RunStatus, string> = {
   Running: ' (running…)',
   Completed: '',
   Stopped: ' (stopped)',
 };
-
-function formatRunLabel(isoDate: string): string {
-  return new Date(isoDate).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
 
 interface RunsDropdownProps {
   runs: KeywordRunSummary[];
@@ -37,7 +28,7 @@ export function RunsDropdown({ runs, selectedRunId, onChange }: RunsDropdownProp
     >
       {runs.map((run) => (
         <option key={run.id} value={run.id}>
-          {formatRunLabel(run.date)}
+          {formatDateTime(run.date)}
           {STATUS_SUFFIX[run.status]}
         </option>
       ))}

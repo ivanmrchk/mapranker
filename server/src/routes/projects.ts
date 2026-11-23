@@ -24,7 +24,18 @@ function loadProjectDetail(id: string) {
     include: {
       pins: { where: { deletedAt: null } },
       rankSnapshots: { orderBy: { date: 'asc' } },
-      keywords: { orderBy: { createdAt: 'asc' } },
+      keywords: {
+        orderBy: { createdAt: 'asc' },
+        // The run the keyword's stats come from: the latest finished one that checked anything.
+        include: {
+          runs: {
+            where: { status: { not: 'Running' }, pinsChecked: { gt: 0 } },
+            orderBy: { date: 'desc' },
+            take: 1,
+            select: { date: true },
+          },
+        },
+      },
       competitors: { orderBy: { avgRank: 'asc' } },
     },
   });

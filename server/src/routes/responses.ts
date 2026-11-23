@@ -35,7 +35,7 @@ export function serializeProjectDetail(
   p: PrismaProject & {
     pins: Pin[];
     rankSnapshots: RankSnapshot[];
-    keywords: PrismaKeyword[];
+    keywords: (PrismaKeyword & { runs: { date: Date }[] })[];
     competitors: PrismaCompetitor[];
   },
 ) {
@@ -49,7 +49,10 @@ export function serializeProjectDetail(
       avgRank: s.avgRank,
       visibility: s.visibility,
     })),
-    keywords: p.keywords.map(serializeKeyword),
+    keywords: p.keywords.map((k) => ({
+      ...serializeKeyword(k),
+      lastScannedAt: k.runs[0]?.date.toISOString() ?? null,
+    })),
     competitors: p.competitors.map(serializeCompetitor),
   };
 }
@@ -60,7 +63,6 @@ export function serializeKeyword(k: PrismaKeyword) {
     text: k.text,
     avgRank: k.avgRank,
     visibility: k.visibility,
-    lastRun: k.lastRun ? k.lastRun.toISOString().slice(0, 10) : null,
   };
 }
 

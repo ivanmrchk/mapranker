@@ -2,17 +2,7 @@ import type { EditablePin } from './KeywordMapPage';
 import { rankColor, rankDescription, type PinRankState } from '../lib/rank';
 import { PinInsightsSection } from './PinInsightsSection';
 import { mapsSearchUrl } from '../lib/mapsUrl';
-
-function formatDate(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
+import { formatDateTime } from '../lib/formatDateTime';
 
 interface PinInspectionPanelProps {
   pin: EditablePin | null;
@@ -93,7 +83,7 @@ export function PinInspectionPanel({
         </div>
         <div>
           <dt className="text-xs text-gray-400">Last Checked</dt>
-          <dd className="font-medium text-gray-900">{formatDate(pin.lastCheckedAt)}</dd>
+          <dd className="font-medium text-gray-900">{pin.lastCheckedAt ? formatDateTime(pin.lastCheckedAt) : '—'}</dd>
         </div>
         <div>
           <dt className="text-xs text-gray-400">Coordinates</dt>

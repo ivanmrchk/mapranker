@@ -29,7 +29,11 @@ export interface Keyword {
   text: string;
   avgRank: number | null;
   visibility: number | null;
-  lastRun: string | null;
+}
+
+export interface ProjectKeyword extends Keyword {
+  /** When its latest finished run started; null if it has never been scanned. */
+  lastScannedAt: string | null;
 }
 
 /** Running: pins are being checked in the background. Stopped: ended early (see stopReason). */
@@ -92,7 +96,7 @@ export interface ProjectDetail extends Project {
   pinsTracked: number;
   pinsTotal: number;
   rankHistory: RankHistoryPoint[];
-  keywords: Keyword[];
+  keywords: ProjectKeyword[];
   competitors: Competitor[];
 }
 

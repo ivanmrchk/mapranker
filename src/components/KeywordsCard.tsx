@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import type { Keyword } from '../types/project';
+import type { ProjectKeyword } from '../types/project';
+import { formatDateTime } from '../lib/formatDateTime';
 
 interface KeywordsCardProps {
-  keywords: Keyword[];
+  keywords: ProjectKeyword[];
   onAdd: (text: string) => Promise<void>;
   onDelete: (keywordId: string) => Promise<void>;
   onRun: (keywordId: string) => Promise<void>;
@@ -77,6 +78,7 @@ export function KeywordsCard({ keywords, onAdd, onDelete, onRun, onViewMap }: Ke
                 <th className="pb-2 pr-3 font-semibold">Keyword</th>
                 <th className="pb-2 pr-3 font-semibold">Avg Rank</th>
                 <th className="pb-2 pr-3 font-semibold">Visibility</th>
+                <th className="pb-2 pr-3 font-semibold">Last Scanned</th>
                 <th className="pb-2 pl-3 text-right font-semibold">Action</th>
               </tr>
             </thead>
@@ -89,6 +91,9 @@ export function KeywordsCard({ keywords, onAdd, onDelete, onRun, onViewMap }: Ke
                   </td>
                   <td className="py-3 pr-3 text-gray-700">
                     {keyword.visibility !== null ? `${keyword.visibility}%` : '—'}
+                  </td>
+                  <td className="whitespace-nowrap py-3 pr-3 text-gray-700">
+                    {keyword.lastScannedAt ? formatDateTime(keyword.lastScannedAt) : 'Never'}
                   </td>
                   <td className="py-3 pl-3">
                     <div className="flex items-center justify-end gap-2">
