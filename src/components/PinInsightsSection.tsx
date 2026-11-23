@@ -7,6 +7,7 @@ import { businessProfileUrl } from '../lib/mapsUrl';
 
 /** A rank that wasn't in the top 20 is plotted one step below it. */
 const NOT_FOUND_VALUE = 21;
+const DAY_MS = 86_400_000;
 
 function shortDate(iso: string) {
   const d = new Date(iso);
@@ -87,17 +88,22 @@ function Movement({ c, hasPrevious }: { c: PinCompetitor; hasPrevious: boolean }
   );
 }
 
-function ReviewGrowth({ c }: { c: PinCompetitor }) {
-  if (c.reviewsGained === null) return null;
-  const since = c.reviewsSince ? `since ${longDate(c.reviewsSince)}` : '';
-  if (c.reviewsGained === 0) {
-    return <span className="text-[11px] text-gray-300" title={`No new reviews ${since}`}>+0</span>;
-  }
+/** How much the review count changed, and over how many days (scans aren't always a week apart). */
+function ReviewChange({ c, scannedAt }: { c: PinCompetitor; scannedAt: string }) {
+  if (c.reviewChange === null || c.reviewsSince === null) return null;
+  const days = Math.max(1, Math.round((Date.parse(scannedAt) - Date.parse(c.reviewsSince)) / DAY_MS));
+  const { text, color } = reviewChangeDisplay(c.reviewChange);
   return (
-    <span className="text-[11px] font-semibold text-green-600" title={`${c.reviewsGained} new reviews ${since}`}>
-      ▲{c.reviewsGained}
-    </span>
+    <div className="text-[11px]" title={`Since ${longDate(c.reviewsSince)}`}>
+      <span className={color}>{text}</span> <span className="text-[10px] text-gray-400">in {days}d</span>
+    </div>
   );
+}
+
+function reviewChangeDisplay(change: number): { text: string; color: string } {
+  if (change > 0) return { text: `▲${change}`, color: 'font-semibold text-green-600' };
+  if (change < 0) return { text: `▼${-change}`, color: 'font-semibold text-red-500' };
+  return { text: '+0', color: 'text-gray-400' };
 }
 
 function CompetitorsTable({ insights }: { insights: PinInsights }) {
@@ -117,7 +123,7 @@ function CompetitorsTable({ insights }: { insights: PinInsights }) {
     <>
       <p className="mt-0.5 text-[11px] text-gray-400">
         {previousScan
-          ? `Movement vs. the scan on ${longDate(previousScan.date)}. Reviews: last 7 days.`
+          ? `Movement vs. the scan on ${longDate(previousScan.date)}. Reviews: change over the days shown.`
           : 'First scan with competitor data at this pin. Movement shows from the next scan.'}
       </p>
       <table className="mt-2 w-full text-xs">
@@ -148,7 +154,7 @@ function CompetitorsTable({ insights }: { insights: PinInsights }) {
               </td>
               <td className="whitespace-nowrap py-1.5 pr-1 text-right align-top">
                 <div className="text-gray-700">{c.reviewCount ?? '—'}</div>
-                <ReviewGrowth c={c} />
+                <ReviewChange c={c} scannedAt={scan.checkedAt} />
               </td>
             </tr>
           ))}

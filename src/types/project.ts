@@ -121,8 +121,9 @@ export interface PinCompetitor {
   name: string;
   rating: number | null;
   reviewCount: number | null;
-  /** Reviews gained over the 7 days before this scan; null without an earlier observation. */
-  reviewsGained: number | null;
+  /** Reviews gained (negative: lost) since reviewsSince; null without an earlier observation. */
+  reviewChange: number | null;
+  /** When the earlier count was seen: the observation closest to a week before this scan. */
   reviewsSince: string | null;
   isYou: boolean;
 }
