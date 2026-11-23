@@ -18,6 +18,11 @@ const COLUMNS: readonly { key: SortKey; label: string; hint: string }[] = [
 
 const COLLAPSED_ROW_COUNT = 10;
 
+interface Sort {
+  readonly key: SortKey;
+  readonly order: 'bestFirst' | 'worstFirst';
+}
+
 interface CompetitorsCardProps {
   projectId: string;
   /** Adding or removing a keyword changes which scans are compared, so it reloads the data. */
@@ -58,21 +63,19 @@ export function CompetitorsCard({ projectId, keywordCount }: CompetitorsCardProp
 }
 
 function CompetitorsTable({ data }: { data: ProjectCompetitors }) {
-  const [sortKey, setSortKey] = useState<SortKey>('visibility');
+  const [sort, setSort] = useState<Sort>({ key: 'visibility', order: 'bestFirst' });
   const [showAll, setShowAll] = useState(false);
 
-  const ranked = [...data.competitors]
-    .sort((a, b) => compareBestFirst(a, b, sortKey))
-    .map((competitor, i) => ({ competitor, place: i + 1 }));
+  const sorted = sortWithPlaces(data.competitors, sort);
   // Your own row always shows, at its real place, even below the collapsed list.
   const visible = showAll
-    ? ranked
-    : ranked.filter(({ competitor, place }) => place <= COLLAPSED_ROW_COUNT || competitor.isYou);
+    ? sorted
+    : sorted.filter(({ competitor }, i) => i < COLLAPSED_ROW_COUNT || competitor.isYou);
   const youListed = data.competitors.some((c) => c.isYou);
 
   return (
     <>
-      <p className="mt-1 text-sm text-gray-400">{describeScans(data)} Click a column to sort by it.</p>
+      <p className="mt-1 text-sm text-gray-400">{describeScans(data)} Click a column to sort by it, again to reverse.</p>
       <p className="text-sm text-gray-400">{describeComparison(data)}</p>
       {!youListed && (
         <p className="mt-3 rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-500">
@@ -86,17 +89,16 @@ function CompetitorsTable({ data }: { data: ProjectCompetitors }) {
               <th className="pb-2 pr-3 pl-2 font-semibold">#</th>
               <th className="pb-2 pr-3 font-semibold">Business</th>
               {COLUMNS.map(({ key, label, hint }) => (
-                <th key={key} className="pb-2 pr-3 font-semibold" aria-sort={sortAria(key, sortKey)}>
+                <th key={key} className="pb-2 pr-3 font-semibold" aria-sort={sort.key === key ? valueOrder(sort) : undefined}>
                   <button
                     type="button"
                     title={hint}
-                    onClick={() => setSortKey(key)}
+                    onClick={() => setSort(nextSort(sort, key))}
                     className={`whitespace-nowrap uppercase tracking-wide hover:text-gray-700 ${
-                      key === sortKey ? 'text-gray-900' : ''
+                      sort.key === key ? 'text-gray-900' : ''
                     }`}
                   >
-                    {label}
-                    {key === sortKey && ' ↓'}
+                    {label} <SortArrow order={sort.key === key ? valueOrder(sort) : null} />
                   </button>
                 </th>
               ))}
@@ -109,17 +111,23 @@ function CompetitorsTable({ data }: { data: ProjectCompetitors }) {
           </tbody>
         </table>
       </div>
-      {ranked.length > COLLAPSED_ROW_COUNT && (
+      {sorted.length > COLLAPSED_ROW_COUNT && (
         <button
           type="button"
           onClick={() => setShowAll((v) => !v)}
           className="mt-3 text-sm font-semibold text-blue-600 hover:underline"
         >
-          {showAll ? `Show top ${COLLAPSED_ROW_COUNT}` : `Show all ${ranked.length}`}
+          {showAll ? 'Show fewer' : `Show all ${sorted.length}`}
         </button>
       )}
     </>
   );
+}
+
+/** ↑ lowest value on top, ↓ highest on top, faint ↕ on columns that aren't sorted by. */
+function SortArrow({ order }: { order: 'ascending' | 'descending' | null }) {
+  if (order === null) return <span className="text-gray-300">{'\u2195\uFE0E'}</span>;
+  return <span>{order === 'ascending' ? '↑' : '↓'}</span>;
 }
 
 function CompetitorRow({ competitor: c, place }: { competitor: ProjectCompetitor; place: number }) {
@@ -151,6 +159,25 @@ function CompetitorRow({ competitor: c, place }: { competitor: ProjectCompetitor
   );
 }
 
+/** A new column starts best first; clicking the current one flips it. */
+function nextSort(current: Sort, key: SortKey): Sort {
+  if (current.key !== key) return { key, order: 'bestFirst' };
+  return { key, order: current.order === 'bestFirst' ? 'worstFirst' : 'bestFirst' };
+}
+
+/**
+ * The rows in display order. `place` always counts from the best, so it means the same in
+ * either direction, and businesses without a value stay at the bottom in both.
+ */
+function sortWithPlaces(competitors: readonly ProjectCompetitor[], { key, order }: Sort) {
+  const bestFirst = [...competitors]
+    .sort((a, b) => compareBestFirst(a, b, key))
+    .map((competitor, i) => ({ competitor, place: i + 1 }));
+  if (order === 'bestFirst') return bestFirst;
+  const hasValue = (row: { competitor: ProjectCompetitor }) => sortValue(row.competitor, key) !== null;
+  return [...bestFirst.filter(hasValue).reverse(), ...bestFirst.filter((row) => !hasValue(row))];
+}
+
 /** Best first: a lower average rank is better, everything else higher. Missing values go last. */
 function compareBestFirst(a: ProjectCompetitor, b: ProjectCompetitor, key: SortKey): number {
   const [valueA, valueB] = [sortValue(a, key), sortValue(b, key)];
@@ -166,9 +193,10 @@ function sortValue(competitor: ProjectCompetitor, key: SortKey): number | null {
   return key === 'movement' ? (competitor.movement?.spotsGained ?? null) : competitor[key];
 }
 
-function sortAria(key: SortKey, sortKey: SortKey) {
-  if (key !== sortKey) return undefined;
-  return key === 'avgRank' ? 'ascending' : 'descending';
+/** Which way the values run down the column: the best average rank is the lowest number. */
+function valueOrder({ key, order }: Sort): 'ascending' | 'descending' {
+  const lowestOnTop = (key === 'avgRank') === (order === 'bestFirst');
+  return lowestOnTop ? 'ascending' : 'descending';
 }
 
 function describeScans({ scans }: ProjectCompetitors): string {
